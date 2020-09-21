@@ -1,5 +1,5 @@
 [general]
-name=Tracing
+name=TracingQgis
 description=Tracing networks plugin
 about=search for connected networks stopping at end of networks or registers
 version=0.1
