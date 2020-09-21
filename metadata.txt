@@ -1,0 +1,25 @@
+[general]
+name=Tracing
+description=Tracing networks plugin
+about=search for connected networks stopping at end of networks or registers
+version=0.1
+qgisMinimumVersion=3.0
+
+author=Jeferson Machado
+email=jeferson.machado@aguasdejoinville.com.br
+
+# Tags are comma separated with spaces allowed
+tags= tracing, aguasdejoinville, networks tracing,
+
+repository=https://github.com/Jefersonnnn/tracing_qgis
+tracker=https://github.com/Jefersonnnn/tracing_qgis/issues
+category=Plugins
+icon=icons/tracingcaj.png
+experimental=False
+deprecated=False
+hasProcessingProvider=yes
+
+changelog=The changelog lists the plugin versions
+    and their changes as in the example below:
+    0.1 - First testing release
+
