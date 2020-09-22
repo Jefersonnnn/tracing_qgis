@@ -18,8 +18,8 @@ class TracingPlugin:
         # save reference to the QGIS interface
         self.iface = iface
 
-        self.__networks = None
-        self.__registers = None
+        self.__pipeline = None
+        self.__valves = None
 
         # Initialize plugin directory
         self.__tm = QgsApplication.taskManager()
@@ -31,7 +31,7 @@ class TracingPlugin:
         self.__set_info_button()
         self.action.setObjectName("TracingAction")
         self.action.setWhatsThis("Configuration for tracing plugin")
-        self.action.setStatusTip("Start tracing from a recovered network")
+        self.action.setStatusTip("Start tracing from a recovered pipeline")
         self.action.triggered.connect(self.run)
 
         # add toolbar button and menu item
@@ -44,23 +44,23 @@ class TracingPlugin:
         self.iface.removeToolBarIcon(self.action)
 
     def run(self):
-        self.__networks = QgsProject.instance().mapLayersByName('networks_tracing')
-        self.__registers = QgsProject.instance().mapLayersByName('registers_tracing')
+        self.__pipeline = QgsProject.instance().mapLayersByName('pipelines_tracing')
+        self.__valves = QgsProject.instance().mapLayersByName('valves_tracing')
 
-        if len(self.__networks) > 0 and len(self.__registers) > 0:
-            network_select = self.iface.activeLayer().selectedFeatures()
-            if network_select:
-                if len(network_select) == 1:
-                    tracing_caj = TracingCAJ(self.__tm, self.__networks, self.__registers)
+        if len(self.__pipeline) > 0 and len(self.__valves) > 0:
+            pipeline_select = self.iface.activeLayer().selectedFeatures()
+            if pipeline_select:
+                if len(pipeline_select) == 1:
+                    tracing_caj = TracingCAJ(self.__tm, self.__pipeline, self.__valves)
                     tracing_caj.start()
                 else:
                     self.iface.messageBar().pushMessage("Info",
                                                         "Selecione apenas UMA rede para iniciar o tracing", level=Qgis.Info)
                     print('Info - Selecione apenas UMA rede para iniciar o tracing')
         else:
-            self.iface.messageBar().pushMessage("Error", "Renomear as redes para 'networks_tracing' e registros para "
-                                                         "'registers_tracing'", level=Qgis.Warning)
-            print('Renomear as redes para networks_tracing e registros para registers_tracing')
+            self.iface.messageBar().pushMessage("Error", "Renomear as redes para 'pipelines_tracing' e registros para "
+                                                         "'valves_tracing'", level=Qgis.Warning)
+            print('Renomear as redes para pipelines_tracing e registros para valves_tracing')
 
     def error(self):
         self.iface.messageBar().pushMessage("Error occorred",

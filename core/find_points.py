@@ -3,7 +3,7 @@ from qgis.core import QgsTask, QgsProject, QgsSpatialIndex, QgsPointXY, QgsMessa
 
 class FindPoints(QgsTask):
 
-    def __init__(self, qnetworks, description='FindHds'):
+    def __init__(self, qpipelines, description='FindHds'):
         super().__init__(description, QgsTask.CanCancel)
 
         self.hds_feature = QgsProject.instance().mapLayersByName('hds_tracing')[0]
@@ -11,7 +11,7 @@ class FindPoints(QgsTask):
                                   flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
 
         self.__exception = None
-        self.q_list_networks = qnetworks
+        self.q_list_pipelines = qpipelines
 
         self.list_hds = []
 

@@ -1,12 +1,12 @@
-from core.tracing_networks import TracingNetworks
+from core.tracing_pipelines import TracingPipelines
 
 
 class TracingCAJ:
-    def __init__(self, task_manager, networks, registers):
-        self.__networks = networks
-        self.__registers = registers
+    def __init__(self, task_manager, pipelines, valves):
+        self.__pipelines = pipelines
+        self.__valves = valves
         self.__tm = task_manager
 
     def start(self):
-        tracing_task = TracingNetworks(self.__networks, self.__registers)
+        tracing_task = TracingPipelines(self.__pipelines, self.__valves)
         self.__tm.addTask(tracing_task)

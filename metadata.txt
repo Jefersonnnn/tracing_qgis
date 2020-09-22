@@ -1,7 +1,7 @@
 [general]
 name=TracingQgis
 description=Tracing networks plugin
-about=search for connected networks stopping at end of networks or registers
+about=search for connected pipelines stopping at end of pipelines or valves
 version=0.1
 qgisMinimumVersion=3.0
 
@@ -9,7 +9,7 @@ author=Jeferson Machado
 email=jeferson.machado@aguasdejoinville.com.br
 
 # Tags are comma separated with spaces allowed
-tags= tracing, aguasdejoinville, networks tracing,
+tags= tracing, aguasdejoinville, pipelines tracing,
 
 repository=https://github.com/Jefersonnnn/tracing_qgis
 tracker=https://github.com/Jefersonnnn/tracing_qgis/issues
