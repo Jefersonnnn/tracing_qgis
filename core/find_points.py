@@ -1,60 +1,81 @@
-from qgis.core import QgsTask, QgsProject, QgsSpatialIndex, QgsPointXY, QgsMessageLog
+from qgis._core import QgsGeometry, QgsDistanceArea
+from qgis.core import QgsTask, QgsProject, QgsSpatialIndex, QgsPointXY, QgsMessageLog, QgsRectangle, QgsVectorLayer, \
+    QgsApplication, QgsPoint, Qgis, QgsWkbTypes
+from qgis.utils import iface
 
 
 class FindPoints(QgsTask):
 
-    def __init__(self, qpipelines, description='FindHds'):
+    def __init__(self, qpipelines, description='FindHds', debug=False):
         super().__init__(description, QgsTask.CanCancel)
 
-        self.hds_feature = QgsProject.instance().mapLayersByName('hds_tracing')[0]
+        self.debug = debug
+
+        if self.debug:
+            self.hds_feature = QgsVectorLayer('C:/Users/jeferson.machado/Desktop/QGIS/shapes/hds_tracing.shp',
+                                              "hds_tracing", "ogr")
+        else:
+            self.hds_feature = QgsProject.instance().mapLayersByName('hds_tracing')[0]
         self.idx_hds = QgsSpatialIndex(self.hds_feature.getFeatures(),
-                                  flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
+                                       flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
 
         self.__exception = None
         self.q_list_pipelines = qpipelines
-
         self.list_hds = []
 
-    def find_hds_by_nearest_neighbor(point_vertex):
-        hds_nearest = idx_hds.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=20,
-                                              maxDistance=30)
+    def find_hds_by_nearest_neighbor(self, points_vertex):
+        hds_nearest = self.idx_hds.nearestNeighbor(point=QgsPointXY(points_vertex), neighbors=10,
+                                                   maxDistance=15)
 
         if len(hds_nearest) > 0:
             for hd in hds_nearest:
-                list_hds.append(hd)
+                if hd not in self.list_hds:
+                    self.list_hds.append(hd)
 
-    def find_hds_by_geo_intersection(self, buff):
-        for hds in self.hds_feature.getFeatures():
-            if buff.intersects(hds.geometry()):
-                hds_nearest = buff.intersection(hds.geometry())
-                self.list_hds.append(hds.id())
+    def split_line(self, p1, p2, pos, pipeline):
+        geo = QgsGeometry.fromPolyline([p1, p2])
+        center = geo.centroid()
+        pipeline.insert(pos, center.asPoint())
 
-    def find_hds_by_intersects_spatial(x1, x2):
-        rect = QgsRectangle(QgsPointXY(x1.x(), x1.y()), QgsPointXY(x2.x(), x2.y()))
-        p_center = rect.center()
-        rect = QgsRectangle().fromCenterAndSize(p_center, rect.width(), rect.height())
+    def get_points(self, pipeline):
+        pipe = [QgsPointXY(pipeline.vertexAt(i)) for i in range(pipeline.get().childCount())]
+        distances = []
+        breakForce = 0
+        while True:
+            if breakForce == 1000:
+                break
+            # check isCanceled() to handle cancellation
+            if self.isCanceled():
+                return False
+            increment = 0
+            pipeline = QgsGeometry.fromMultiPointXY(pipe)
 
-        hds_nearest = idx_hds.intersects(rect)
+            for i in range(len(pipe) -1):
+                p1 = pipeline.vertexAt(i)
+                p2 = pipeline.vertexAt(i + 1)
+                d = QgsDistanceArea()
+                distance = d.measureLine(QgsPointXY(p1), QgsPointXY(p2))
+                distances.append(distance)
+                if distance > 10:
+                    self.split_line(p1, p2, i+1+increment, pipe)
+                    increment += 1
 
-        if len(hds_nearest) > 0:
-            for hd in hds_nearest:
-                list_hds.append(hd)
+            breakForce += 1
+            if distances:
+                if max(distances) <= 10:
+                    break
+            distances.clear()
+        return pipeline
 
     def run(self):
 
         try:
-            while len(q_list_networks) > 0:
-                network = q_list_networks.pop(0)
-                net_geo = network.geometry()
+            while len(self.q_list_pipelines) > 0:
+                pipeline = self.q_list_pipelines.pop(0)
+                pipeline_geo = self.get_points(pipeline.geometry())
 
-                buff = net_geo.buffer(15, 1)
-                for i in range(0, len(net_geo.get()) - 1):
-                    find_hds_by_intersects_spatial(net_geo.vertexAt(i), net_geo.vertexAt(i + 1))
-
-                # find_hds_by_geo_intersection(buff)
-
-                # for i in range(len(net_geo.get())):
-                #    find_hds_by_nearest_neighbor(net_geo.vertexAt(i))
+                for i in range(0, len(pipeline_geo.get()) - 1):
+                    self.find_hds_by_nearest_neighbor(pipeline_geo.vertexAt(i))
 
         except Exception as e:
             self.__exception = e
@@ -64,13 +85,10 @@ class FindPoints(QgsTask):
 
     def finished(self, result):
         if result:
-            self.__registers_features.selectByIds(self.__list_registers)
-            self.__networks_features.selectByIds(self.__list_visited_network_ids)
+            self.hds_feature.selectByIds(self.list_hds)
 
-            QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly"
-                                     f"Iterations: {self.__iterations}"
-                                     f"Networks: {self.__list_visited_network_ids}"
-                                     f"Registers: {self.__list_registers}",
+            QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly\n"
+                                     f"HDS: {self.list_hds}",
                                      level=Qgis.Success)
         else:
             if self.__exception is None:
@@ -87,3 +105,20 @@ class FindPoints(QgsTask):
         QgsMessageLog.logMessage(
             f'TracingTrask {self.description()} was canceled', level=Qgis.Info)
         super().cancel()
+
+
+if __name__ == '__main__':
+    path_to_pipeline_layer = "C:\\Users\\jeferson.machado\\Desktop\\QGIS\\shapes\\rede_agua_tracing.shp"
+
+    pipelines = QgsVectorLayer(path_to_pipeline_layer, "Pipeline layer", "ogr")
+    if not pipelines.isValid():
+        print("Layer failed to load!")
+    else:
+        QgsProject.instance().addMapLayer(pipelines)
+
+    pipes_ids = [6495]
+    pipelines.selectByIds(pipes_ids)
+    qlist_pipes = [x for x in pipelines.getSelectedFeatures()]
+
+    find_p = FindPoints(qlist_pipes, debug=True)
+    find_p.run()
