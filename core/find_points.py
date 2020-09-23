@@ -25,7 +25,7 @@ class FindPoints(QgsTask):
 
     def find_hds_by_nearest_neighbor(self, points_vertex):
         hds_nearest = self.idx_hds.nearestNeighbor(point=QgsPointXY(points_vertex), neighbors=10,
-                                                   maxDistance=15)
+                                                   maxDistance=25)
 
         if len(hds_nearest) > 0:
             for hd in hds_nearest:
