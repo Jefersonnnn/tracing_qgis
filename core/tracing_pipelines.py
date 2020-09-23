@@ -42,7 +42,7 @@ class TracingPipelines(QgsTask):
         # Busca por redes selecionadas (necessário ser apenas uma)
         if self.debug:
             self._pipelines_features.selectByIds([4343])
-            #self._pipelines_features.getFeatures(16)
+            # self._pipelines_features.getFeatures(16)
 
         selected_pipeline = self._pipelines_features.selectedFeatures()
 
@@ -117,16 +117,26 @@ class TracingPipelines(QgsTask):
                                             flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
 
     def __find_neighbors(self, point_vertex):
+        reg_isvisivel = None
+        reg_status = None
+
+        # Busca pelo registro mais próximo, dentro do raio maxDistance=user_distance
         reg_nearest = self.__idx_valves.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=1,
                                                         maxDistance=self.__user_distance)
+
         if len(reg_nearest) > 0:
-            isvisivel = str(list(self._valves_features.getFeatures(reg_nearest))[0]['visivel'])
-            if isvisivel.upper() != 'NÃO':
+            # visivel = 'sim' = registro visível | visivel = 'não' = registro não visível
+            reg_isvisivel = str(list(self._valves_features.getFeatures(reg_nearest))[0]['visivel'])
+            # status = 0 = 'Aberto' | status = 1 = 'Fechado'
+            reg_status = str(list(self._valves_features.getFeatures(reg_nearest))[0]['status'])
+
+        if len(reg_nearest) > 0:
+            if reg_isvisivel.upper() != 'NÃO' and reg_status == '0':
                 self.__list_valves.append(reg_nearest[0])
         else:
-            pipelines_nearest = self.__idx_pipelines.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=3,
+            # Busca pelas 4 redes mais próximas dentro do raio maxDistance=user_distance
+            pipelines_nearest = self.__idx_pipelines.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=4,
                                                                      maxDistance=self.__user_distance)
-            # pipelines_nearest = idx_rede_agua.intersects(QgsRectangle(QgsPointXY(pointVertex), QgsPointXY(pointVertex)))
             if len(pipelines_nearest) > 0:
                 for pipeline_id in pipelines_nearest:
                     pipeline_geometry = self.__idx_pipelines.geometry(pipeline_id)
@@ -152,4 +162,3 @@ if __name__ == '__main__':
 
     tracing = TracingPipelines(pipe_features, valves_features, debug=True)
     tracing.run()
-

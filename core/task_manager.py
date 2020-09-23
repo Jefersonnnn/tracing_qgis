@@ -9,7 +9,8 @@ class TracingCAJ:
         self.__tm = task_manager
 
     def start(self):
-        tracing_task = TracingPipelines(self.__pipelines, self.__valves, onfinish=self.select_hidrometers)
+        #tracing_task = TracingPipelines(self.__pipelines, self.__valves, onfinish=self.select_hidrometers)
+        tracing_task = TracingPipelines(self.__pipelines, self.__valves)
         self.__tm.addTask(tracing_task)
 
     def select_hidrometers(self):
