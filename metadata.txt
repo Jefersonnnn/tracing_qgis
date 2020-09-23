@@ -2,7 +2,7 @@
 name=TracingQgis
 description=Tracing networks plugin
 about=search for connected pipelines stopping at end of pipelines or valves
-version=0.1
+version=0.2.1
 qgisMinimumVersion=3.0
 
 author=Jeferson Machado
@@ -21,5 +21,6 @@ hasProcessingProvider=yes
 
 changelog=The changelog lists the plugin versions
     and their changes as in the example below:
+    0.2 - Functional release
     0.1 - First testing release
 

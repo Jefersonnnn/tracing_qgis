@@ -14,6 +14,7 @@ class TracingPipelines(QgsTask):
 
         self.onfinish = onfinish
         self.debug = debug
+
         self.__user_distance = user_distance
 
         self._pipelines_features = pipelines[0]
@@ -87,7 +88,8 @@ class TracingPipelines(QgsTask):
             self._valves_features.selectByIds(self.__list_valves)
             self._pipelines_features.selectByIds(self.__list_visited_pipelines_ids)
 
-            self.onfinish()
+            if self.onfinish:
+                self.onfinish()
 
             QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly"
                                      f"Iterations: {self.__iterations}"
