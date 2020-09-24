@@ -9,5 +9,5 @@ def classFactory(iface):
     :param iface: A QGIS interface instance.
     :type iface: QgsInterface
     """
-    from .tracing import TracingPlugin
-    return TracingPlugin(iface)
+    from .tracing import Tracing
+    return Tracing(iface)
