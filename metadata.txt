@@ -1,9 +1,9 @@
 [general]
 name=TracingQgis
 description=Tracing networks plugin
-about=This plug-in will select all polyline (*pipelines*) segments from a selected line segment, stopping at points (*valves*). The only data you need to provide is a layer with polyline segments (*pipelines_tracing*), a layer with point segments (*valves_tracing*) and a selected layer feature.
+about=This plug-in will select all polyline (pipelines) segments from a selected line segment, stopping at points (valves). The only data you need to provide is a layer with polyline segments (pipelines_tracing), a layer with point segments (valves_tracing) and a selected layer feature.
 version=0.2.1
-qgisMinimumVersion=3.0
+qgisMinimumVersion=3.12
 
 author=Jeferson Machado
 email=jeferson.machado@aguasdejoinville.com.br
@@ -23,4 +23,3 @@ changelog=The changelog lists the plugin versions
     and their changes as in the example below:
     0.2 - Functional release
     0.1 - First testing release
-
