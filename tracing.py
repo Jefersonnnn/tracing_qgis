@@ -2,17 +2,17 @@ from qgis.PyQt.QtGui import *
 from qgis.PyQt.QtWidgets import *
 
 from qgis.core import (
-                       Qgis,
-                       QgsMessageLog,
-                       QgsProject,
-                       QgsApplication)
+    Qgis,
+    QgsMessageLog,
+    QgsProject,
+    QgsApplication)
 
 import os
 
 from core.task_manager import TracingCAJ
 
 
-class TracingPlugin:
+class Tracing:
 
     def __init__(self, iface):
         # save reference to the QGIS interface
@@ -28,10 +28,9 @@ class TracingPlugin:
 
     def initGui(self):
         # create action that will start plugin configuration
-        self.__set_info_button()
+        self._set_info_button()
         self.action.setObjectName("TracingAction")
-        self.action.setWhatsThis("Configuration for tracing plugin")
-        self.action.setStatusTip("Start tracing from a recovered pipeline")
+        self.action.setStatusTip("Start tracing from selected pipeline")
         self.action.triggered.connect(self.run)
 
         # add toolbar button and menu item
@@ -55,20 +54,21 @@ class TracingPlugin:
                     tracing_caj.start()
                 else:
                     self.iface.messageBar().pushMessage("Info",
-                                                        "Selecione apenas UMA rede para iniciar o tracing", level=Qgis.Info)
-                    print('Info - Selecione apenas UMA rede para iniciar o tracing')
+                                                        "Select only ONE network to start", level=Qgis.Info)
+                    print('Info - Select only ONE network to start')
         else:
-            self.iface.messageBar().pushMessage("Error", "Renomear as redes para 'pipelines_tracing' e registros para "
-                                                         "'valves_tracing'", level=Qgis.Warning)
-            print('Renomear as redes para pipelines_tracing e registros para valves_tracing')
+            self.iface.messageBar().pushMessage("Info", 'Rename layers for "pipelines_tracing" and "valves_tracing" '
+                                                , level=Qgis.Info)
+            print('Rename layers for "pipelines_tracing" and "valves_tracing"')
 
     def error(self):
         self.iface.messageBar().pushMessage("Error occorred",
                                             "Error",
                                             level=Qgis.Critical)
+
         QgsMessageLog.logMessage('Error occurred')
 
-    def __set_info_button(self):
+    def _set_info_button(self):
         """ Set main information button (always visible) """
 
         icon_path = self.icon_folder + 'tracingcaj.png'

@@ -14,19 +14,14 @@ class TracingPipelines(QgsTask):
 
         self.onfinish = onfinish
         self.debug = debug
-
         self.__user_distance = user_distance
-
         self._pipelines_features = pipelines[0]
         self._valves_features = valves[0]
-
         self.__list_valves = []
         self.__list_visited_pipelines = []
         self.__list_visited_pipelines_ids = []
-
         self.__q_list_pipelines = []
         self.__q_list_pipelines_ids = []
-
         self.__iterations = 0
         self.__exception = None
 

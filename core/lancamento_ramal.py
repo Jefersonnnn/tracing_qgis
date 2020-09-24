@@ -8,6 +8,9 @@ from qgis.core import (QgsTask,
 
 
 class LancamentoRamal(QgsTask):
+    """
+    Adiciona 'ramais' como links entre redes e hidrômetros
+    """
 
     def __init__(self, pipelines, hidrometers, description='CreateRamalCAJ', user_distance=30):
         super().__init__(description, QgsTask.CanCancel)
