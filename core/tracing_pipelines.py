@@ -37,7 +37,7 @@ class TracingPipelines(QgsTask):
 
         # Busca por redes selecionadas (necessário ser apenas uma)
         if self.debug:
-            self._pipelines_features.selectByIds([4343])
+            self._pipelines_features.selectByIds([4399])
             # self._pipelines_features.getFeatures(16)
 
         selected_pipeline = self._pipelines_features.selectedFeatures()
@@ -59,6 +59,7 @@ class TracingPipelines(QgsTask):
 
                 pipeline = self.__q_list_pipelines.pop(0)
                 pipeline_id = self.__q_list_pipelines_ids.pop(0)
+
                 if pipeline_id not in self.__list_visited_pipelines_ids:
                     self.__list_visited_pipelines.append(pipeline)
                     self.__list_visited_pipelines_ids.append(pipeline_id)
@@ -70,18 +71,20 @@ class TracingPipelines(QgsTask):
                         v2 = pipeline.vertexAt(len(pipeline.get()) - 1)
 
                     try:
-                        self.__find_neighbors(v1)
-                        self.__find_neighbors(v2)
+                        self.__find_neighbors(v1, pipeline_id)
+                        self.__find_neighbors(v2, pipeline_id)
                     except Exception as e:
                         self.__exception = e
                         return False
-
+        self.finished(True)
         return True
 
     def finished(self, result):
         if result:
             self._valves_features.selectByIds(self.__list_valves)
             self._pipelines_features.selectByIds(self.__list_visited_pipelines_ids)
+
+            print(self.__list_visited_pipelines_ids)
 
             if self.onfinish:
                 self.onfinish()
@@ -113,7 +116,7 @@ class TracingPipelines(QgsTask):
         self.__idx_valves = QgsSpatialIndex(self._valves_features.getFeatures(),
                                             flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
 
-    def __find_neighbors(self, point_vertex):
+    def __find_neighbors(self, point_vertex, pipeline_origin_id=None):
         reg_isvisivel = None
         reg_status = None
 
@@ -136,10 +139,27 @@ class TracingPipelines(QgsTask):
                                                                      maxDistance=self.__user_distance)
             if len(pipelines_nearest) > 0:
                 for pipeline_id in pipelines_nearest:
+                    if pipeline_origin_id:
+
+                        origin_diameter = list(self._pipelines_features.getFeatures([pipeline_origin_id]))[0][
+                            'diametro']
+                        pipeline_diameter = list(self._pipelines_features.getFeatures([pipeline_id]))[0]['diametro']
+                        if is_downstream(origin_diameter, pipeline_diameter):
+                            continue
+                            # self.__list_visited_pipelines.append(self.__idx_pipelines.geometry(pipeline_id))
+                            # self.__list_visited_pipelines_ids.append(pipeline_id)
+
                     pipeline_geometry = self.__idx_pipelines.geometry(pipeline_id)
                     if pipeline_id not in self.__list_visited_pipelines_ids:
                         self.__q_list_pipelines_ids.append(pipeline_id)
                         self.__q_list_pipelines.append(pipeline_geometry)
+
+
+def is_downstream(origin_diameter, destination_diameter):
+    if origin_diameter > 100:
+        if destination_diameter <= 75:
+            return True
+    return False
 
 
 if __name__ == '__main__':
