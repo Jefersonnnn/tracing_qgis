@@ -10,6 +10,7 @@ from qgis.core import (
 import os
 
 from core.task_manager import TracingCAJ
+from global_vars import init_global_vars
 
 
 class Tracing:
@@ -36,6 +37,9 @@ class Tracing:
         # add toolbar button and menu item
         self.iface.addToolBarIcon(self.action)
         self.iface.addPluginToMenu("&Tracing plugins", self.action)
+
+        # Initialize global variables
+        init_global_vars(self.iface)
 
     def unload(self):
         # remove the plugin menu item and icon

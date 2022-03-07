@@ -6,6 +6,8 @@ from qgis.core import (QgsTask,
                        QgsPointXY,
                        QgsProject, QgsApplication)
 
+import global_vars
+
 
 class TracingPipelines(QgsTask):
 
@@ -31,13 +33,18 @@ class TracingPipelines(QgsTask):
         if self.__idx_valves is None or self.__idx_pipelines is None:
             self.__create_spatial_index()
 
+        self.iface = None
+        if self.iface is None:
+            self.iface = global_vars.iface
+
     def run(self):
+        print('RUN TracingPipelines: ', self.description())
         QgsMessageLog.logMessage(f'Started task {self.description()}',
                                  'TracingCAJ', Qgis.Info)
 
         # Busca por redes selecionadas (necessário ser apenas uma)
         if self.debug:
-            self._pipelines_features.selectByIds([4399])
+            self._pipelines_features.selectByIds([13853])
             # self._pipelines_features.getFeatures(16)
 
         selected_pipeline = self._pipelines_features.selectedFeatures()
@@ -76,7 +83,6 @@ class TracingPipelines(QgsTask):
                     except Exception as e:
                         self.__exception = e
                         return False
-        self.finished(True)
         return True
 
     def finished(self, result):
@@ -84,16 +90,22 @@ class TracingPipelines(QgsTask):
             self._valves_features.selectByIds(self.__list_valves)
             self._pipelines_features.selectByIds(self.__list_visited_pipelines_ids)
 
-            print(self.__list_visited_pipelines_ids)
-
             if self.onfinish:
                 self.onfinish()
 
-            QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly"
+            names_valves = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
+            QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly\n"
                                      f"Iterations: {self.__iterations}"
-                                     f"Pipelines: {self.__list_visited_pipelines_ids}"
-                                     f"Valves: {self.__list_valves}",
+                                     f"Valves: {names_valves}",
                                      level=Qgis.Success)
+            # copy to clipboard
+            self.iface.messageBar().pushMessage(
+                'TracingCAJ',
+                f"Task {self.description()} has been executed correctly\n"
+                f"Copy to clipboard: {names_valves}",
+                level=Qgis.Success,
+                duration=10)
+            QgsApplication.clipboard().setText(','.join(names_valves))
         else:
             if self.__exception is None:
                 QgsMessageLog.logMessage(f"Tracing {self.description()} not successful "
