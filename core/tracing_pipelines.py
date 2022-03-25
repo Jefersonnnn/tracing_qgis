@@ -94,12 +94,10 @@ class TracingPipelines(QgsTask):
     def finished(self, result):
         if result:
             # Seleciona os registro não visiveis
-            print("Selecionando registro não visíveis")
             self._valves_features.selectByIds(self.__list_valves_not_visibles)
             names_valves_not_visibels = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
 
             # Seleciona os registro visiveis
-            print("Selecionando registro visíveis")
             self._valves_features.selectByIds(self.__list_valves)
             names_valves = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
 
