@@ -20,6 +20,7 @@ class TracingPipelines(QgsTask):
         self._pipelines_features = pipelines[0]
         self._valves_features = valves[0]
         self.__list_valves = []
+        self.__list_valves_not_visibles = []
         self.__list_visited_pipelines = []
         self.__list_visited_pipelines_ids = []
         self.__q_list_pipelines = []
@@ -59,6 +60,7 @@ class TracingPipelines(QgsTask):
 
             while len(self.__q_list_pipelines) > 0:
                 self.__iterations += 1
+                QgsMessageLog.logMessage(f'Iteration {self.__iterations}', 'TracingCAJ', Qgis.Info)
 
                 # check isCanceled() to handle cancellation
                 if self.isCanceled():
@@ -71,6 +73,8 @@ class TracingPipelines(QgsTask):
                     self.__list_visited_pipelines.append(pipeline)
                     self.__list_visited_pipelines_ids.append(pipeline_id)
 
+                    QgsMessageLog.logMessage(f'|-> Analisando Pipeline {pipeline_id}', 'TracingCAJ', Qgis.Info)
+
                     v1 = pipeline.vertexAt(0)
                     if self.debug:
                         v2 = pipeline.vertexAt(pipeline.get()[0].childCount() - 1)
@@ -78,7 +82,9 @@ class TracingPipelines(QgsTask):
                         v2 = pipeline.vertexAt(len(pipeline.get()) - 1)
 
                     try:
+                        QgsMessageLog.logMessage(f'|--> Analisando vertex {str(v1)}', 'TracingCAJ', Qgis.Info)
                         self.__find_neighbors(v1, pipeline_id)
+                        QgsMessageLog.logMessage(f'|--> Analisando vertex {v2}', 'TracingCAJ', Qgis.Info)
                         self.__find_neighbors(v2, pipeline_id)
                     except Exception as e:
                         self.__exception = e
@@ -87,16 +93,25 @@ class TracingPipelines(QgsTask):
 
     def finished(self, result):
         if result:
+            # Seleciona os registro não visiveis
+            print("Selecionando registro não visíveis")
+            self._valves_features.selectByIds(self.__list_valves_not_visibles)
+            names_valves_not_visibels = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
+
+            # Seleciona os registro visiveis
+            print("Selecionando registro visíveis")
             self._valves_features.selectByIds(self.__list_valves)
+            names_valves = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
+
             self._pipelines_features.selectByIds(self.__list_visited_pipelines_ids)
 
             if self.onfinish:
                 self.onfinish()
 
-            names_valves = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
             QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly\n"
-                                     f"Iterations: {self.__iterations}"
-                                     f"Valves: {names_valves}",
+                                     f"Iterations: {self.__iterations}\n"
+                                     f"Valves: {names_valves}\n"
+                                     f"Valves not visibles: {names_valves_not_visibels}",
                                      level=Qgis.Success)
             # copy to clipboard
             self.iface.messageBar().pushMessage(
@@ -135,36 +150,52 @@ class TracingPipelines(QgsTask):
         # Busca pelo registro mais próximo, dentro do raio maxDistance=user_distance
         reg_nearest = self.__idx_valves.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=1,
                                                         maxDistance=self.__user_distance)
-
+        QgsMessageLog.logMessage(f'|---> Nearest: {reg_nearest}', 'TracingCAJ', Qgis.Info)
         if len(reg_nearest) > 0:
+            QgsMessageLog.logMessage(f'|----> Vertex {point_vertex} is near valve {reg_nearest[0]}', 'TracingCAJ',
+                                     Qgis.Info)
             # visivel = 'sim' = registro visível | visivel = 'não' = registro não visível
             reg_isvisivel = str(list(self._valves_features.getFeatures(reg_nearest))[0]['visivel'])
             # status = 0 = 'Aberto' | status = 1 = 'Fechado'
             reg_status = str(list(self._valves_features.getFeatures(reg_nearest))[0]['status'])
 
-        if len(reg_nearest) > 0:
-            if reg_isvisivel.upper() != 'NÃO' and reg_status == '0':
+            QgsMessageLog.logMessage(
+                f'|----> Valve {reg_nearest[0]} | visivel is {reg_isvisivel} and status is {reg_status}', 'TracingCAJ',
+                Qgis.Info)
+
+            if reg_isvisivel \
+                    and reg_status \
+                    and reg_isvisivel != 'NULL' \
+                    and reg_isvisivel.upper() != 'NÃO' \
+                    and reg_status == '0':
                 self.__list_valves.append(reg_nearest[0])
+            else:
+                self.__list_valves_not_visibles.append(reg_nearest[0])  # Registro não visível ou NULL
+                self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
         else:
-            # Busca pelas 4 redes mais próximas dentro do raio maxDistance=user_distance
-            pipelines_nearest = self.__idx_pipelines.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=4,
-                                                                     maxDistance=self.__user_distance)
-            if len(pipelines_nearest) > 0:
-                for pipeline_id in pipelines_nearest:
-                    if pipeline_origin_id:
+            self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
 
-                        origin_diameter = list(self._pipelines_features.getFeatures([pipeline_origin_id]))[0][
-                            'diametro']
-                        pipeline_diameter = list(self._pipelines_features.getFeatures([pipeline_id]))[0]['diametro']
-                        if is_downstream(origin_diameter, pipeline_diameter):
-                            continue
-                            # self.__list_visited_pipelines.append(self.__idx_pipelines.geometry(pipeline_id))
-                            # self.__list_visited_pipelines_ids.append(pipeline_id)
+    def __find_pipelines_neighbors(self, point_vertex, pipeline_origin_id):
+        QgsMessageLog.logMessage(f'|----> Vertexis not near any valve', 'TracingCAJ', Qgis.Info)
+        # Busca pelas 4 redes mais próximas no raio maxDistance=user_distance
+        pipelines_nearest = self.__idx_pipelines.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=4,
+                                                                 maxDistance=self.__user_distance)
+        if len(pipelines_nearest) > 0:
+            for pipeline_id in pipelines_nearest:
+                if pipeline_origin_id:
 
-                    pipeline_geometry = self.__idx_pipelines.geometry(pipeline_id)
-                    if pipeline_id not in self.__list_visited_pipelines_ids:
-                        self.__q_list_pipelines_ids.append(pipeline_id)
-                        self.__q_list_pipelines.append(pipeline_geometry)
+                    origin_diameter = list(self._pipelines_features.getFeatures([pipeline_origin_id]))[0][
+                        'diametro']
+                    pipeline_diameter = list(self._pipelines_features.getFeatures([pipeline_id]))[0]['diametro']
+                    if is_downstream(origin_diameter, pipeline_diameter):
+                        continue
+                        # self.__list_visited_pipelines.append(self.__idx_pipelines.geometry(pipeline_id))
+                        # self.__list_visited_pipelines_ids.append(pipeline_id)
+
+                pipeline_geometry = self.__idx_pipelines.geometry(pipeline_id)
+                if pipeline_id not in self.__list_visited_pipelines_ids:
+                    self.__q_list_pipelines_ids.append(pipeline_id)
+                    self.__q_list_pipelines.append(pipeline_geometry)
 
 
 def is_downstream(origin_diameter, destination_diameter):
