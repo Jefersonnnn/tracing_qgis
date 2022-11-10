@@ -11,14 +11,14 @@ import global_vars
 
 class TracingPipelines(QgsTask):
 
-    def __init__(self, pipelines, valves, description='TracingCAJ', user_distance=0.001, onfinish=None, debug=False):
+    def __init__(self, pipelines, valves, description='TracingCAJ', user_distance=0.001, onfinish=None, debug=False, callback_msg=None):
         super().__init__(description, QgsTask.CanCancel)
 
         self.onfinish = onfinish
         self.debug = debug
         self.__user_distance = user_distance
-        self._pipelines_features = pipelines[0]
-        self._valves_features = valves[0]
+        self._pipelines_features = pipelines
+        self._valves_features = valves
         self.__list_valves = []
         self.__list_valves_not_visibles = []
         self.__list_visited_pipelines = []
@@ -27,6 +27,9 @@ class TracingPipelines(QgsTask):
         self.__q_list_pipelines_ids = []
         self.__iterations = 0
         self.__exception = None
+
+        # Callbackmsg
+        self._callback_msg = callback_msg
 
         # Cria os índices espaciais
         self.__idx_pipelines = None
@@ -82,8 +85,11 @@ class TracingPipelines(QgsTask):
                         v2 = pipeline.vertexAt(len(pipeline.get()) - 1)
 
                     try:
+                        if self._callback_msg:
+                            self._callback_msg(f'Carregando... - {self.__iterations}')
                         QgsMessageLog.logMessage(f'|--> Analisando vertex {str(v1)}', 'TracingCAJ', Qgis.Info)
                         self.__find_neighbors(v1, pipeline_id)
+
                         QgsMessageLog.logMessage(f'|--> Analisando vertex {v2}', 'TracingCAJ', Qgis.Info)
                         self.__find_neighbors(v2, pipeline_id)
                     except Exception as e:
@@ -118,7 +124,10 @@ class TracingPipelines(QgsTask):
                 f"Copy to clipboard: {names_valves}",
                 level=Qgis.Success,
                 duration=10)
+            if self._callback_msg:
+                self._callback_msg('Finalizando! registros no CTRL+V')
             QgsApplication.clipboard().setText(','.join(names_valves))
+
         else:
             if self.__exception is None:
                 QgsMessageLog.logMessage(f"Tracing {self.description()} not successful "
@@ -150,22 +159,20 @@ class TracingPipelines(QgsTask):
                                                         maxDistance=self.__user_distance)
         QgsMessageLog.logMessage(f'|---> Nearest: {reg_nearest}', 'TracingCAJ', Qgis.Info)
         if len(reg_nearest) > 0:
+            _feature = list(self._valves_features.getFeatures(reg_nearest))[0]
+
             QgsMessageLog.logMessage(f'|----> Vertex {point_vertex} is near valve {reg_nearest[0]}', 'TracingCAJ',
                                      Qgis.Info)
             # visivel = 'sim' = registro visível | visivel = 'não' = registro não visível
-            reg_isvisivel = str(list(self._valves_features.getFeatures(reg_nearest))[0]['visivel'])
+            reg_isvisivel = str(_feature['visivel'])
             # status = 0 = 'Aberto' | status = 1 = 'Fechado'
-            reg_status = str(list(self._valves_features.getFeatures(reg_nearest))[0]['status'])
+            reg_status = str(_feature['status'])
 
             QgsMessageLog.logMessage(
                 f'|----> Valve {reg_nearest[0]} | visivel is {reg_isvisivel} and status is {reg_status}', 'TracingCAJ',
                 Qgis.Info)
 
-            if reg_isvisivel \
-                    and reg_status \
-                    and reg_isvisivel != 'NULL' \
-                    and reg_isvisivel.upper() != 'NÃO' \
-                    and reg_status == '0':
+            if reg_isvisivel.upper() != 'NÃO' and reg_status == '0':
                 self.__list_valves.append(reg_nearest[0])
             else:
                 self.__list_valves_not_visibles.append(reg_nearest[0])  # Registro não visível ou NULL
