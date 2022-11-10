@@ -3,15 +3,15 @@ from core.tracing_pipelines import TracingPipelines
 
 
 class TracingCAJ:
-    def __init__(self, task_manager, pipelines, valves, callback_msg=None):
+    def __init__(self, task_manager, pipelines, valves, parent=None):
         self.__pipelines = pipelines
         self.__valves = valves
         self.__tm = task_manager
-        self._callback_msg = callback_msg
+        self._parent = parent
 
     def start(self):
         #tracing_task = TracingPipelines(self.__pipelines, self.__valves, onfinish=self.select_hidrometers)
-        tracing_task = TracingPipelines(self.__pipelines, self.__valves, callback_msg=self._callback_msg)
+        tracing_task = TracingPipelines(self.__pipelines, self.__valves, parent=self._parent)
         self.__tm.addTask(tracing_task)
 
     def select_hidrometers(self):

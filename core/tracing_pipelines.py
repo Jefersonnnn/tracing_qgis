@@ -11,7 +11,8 @@ import global_vars
 
 class TracingPipelines(QgsTask):
 
-    def __init__(self, pipelines, valves, description='TracingCAJ', user_distance=0.001, onfinish=None, debug=False, callback_msg=None):
+    def __init__(self, pipelines, valves, description='TracingCAJ', user_distance=0.001, onfinish=None, debug=False,
+                 parent=None):
         super().__init__(description, QgsTask.CanCancel)
 
         self.onfinish = onfinish
@@ -29,7 +30,7 @@ class TracingPipelines(QgsTask):
         self.__exception = None
 
         # Callbackmsg
-        self._callback_msg = callback_msg
+        self._parent = parent
 
         # Cria os índices espaciais
         self.__idx_pipelines = None
@@ -85,8 +86,6 @@ class TracingPipelines(QgsTask):
                         v2 = pipeline.vertexAt(len(pipeline.get()) - 1)
 
                     try:
-                        if self._callback_msg:
-                            self._callback_msg(f'Carregando... - {self.__iterations}')
                         QgsMessageLog.logMessage(f'|--> Analisando vertex {str(v1)}', 'TracingCAJ', Qgis.Info)
                         self.__find_neighbors(v1, pipeline_id)
 
@@ -98,12 +97,16 @@ class TracingPipelines(QgsTask):
         return True
 
     def finished(self, result):
+        # Ativa novamente o botão
+
+        self._parent.toggle_button_iniciar()
+
         if result:
-            # Seleciona os registro não visiveis
+            # Seleciona os registros não visiveis
             self._valves_features.selectByIds(self.__list_valves_not_visibles)
             names_valves_not_visibels = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
 
-            # Seleciona os registro visiveis
+            # Seleciona os registros visiveis
             self._valves_features.selectByIds(self.__list_valves)
             names_valves = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
 
@@ -113,9 +116,9 @@ class TracingPipelines(QgsTask):
                 self.onfinish()
 
             QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly\n"
-                                     f"Iterations: {self.__iterations}\n"
-                                     f"Valves: {names_valves}\n"
-                                     f"Valves not visibles: {names_valves_not_visibels}",
+                                     f"Iterações: {self.__iterations}\n"
+                                     f"Registros: {names_valves}\n"
+                                     f"Registro não visíveis: {names_valves_not_visibels}",
                                      level=Qgis.Success)
             # copy to clipboard
             self.iface.messageBar().pushMessage(
@@ -124,10 +127,15 @@ class TracingPipelines(QgsTask):
                 f"Copy to clipboard: {names_valves}",
                 level=Qgis.Success,
                 duration=10)
-            if self._callback_msg:
-                self._callback_msg('Finalizando! registros no CTRL+V')
-            QgsApplication.clipboard().setText(','.join(names_valves))
 
+            if self._parent:
+                self._parent.set_status_msg('Finalizado! registros no CTRL+V')
+
+            if self._parent:
+                self._parent.set_final_msg(f"Registros: {','.join(names_valves)}\n"
+                                           f"Registro não visíveis: {','.join(names_valves_not_visibels)}")
+
+            QgsApplication.clipboard().setText(','.join(names_valves))
         else:
             if self.__exception is None:
                 QgsMessageLog.logMessage(f"Tracing {self.description()} not successful "
