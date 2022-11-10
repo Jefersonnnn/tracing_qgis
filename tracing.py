@@ -1,15 +1,18 @@
 from qgis.PyQt.QtGui import *
-from qgis.PyQt.QtWidgets import *
+from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
 from qgis.core import (
     Qgis,
     QgsMessageLog,
     QgsProject,
-    QgsApplication)
+    QgsApplication,
+    QgsMapLayer)
 
 import os
 
-from core.task_manager import TracingCAJ
+
+from global_vars import init_global_vars
+from controller import ConfigController
 
 
 class Tracing:
@@ -17,12 +20,12 @@ class Tracing:
     def __init__(self, iface):
         # save reference to the QGIS interface
         self.iface = iface
+        self.dlg_config = None
 
         self.__pipeline = None
         self.__valves = None
 
         # Initialize plugin directory
-        self.__tm = QgsApplication.taskManager()
         self.plugin_dir = os.path.dirname(__file__)
         self.icon_folder = self.plugin_dir + os.sep + 'icons' + os.sep
 
@@ -37,29 +40,36 @@ class Tracing:
         self.iface.addToolBarIcon(self.action)
         self.iface.addPluginToMenu("&Tracing plugins", self.action)
 
+        # Initialize global variables
+        init_global_vars(self.iface)
+
     def unload(self):
         # remove the plugin menu item and icon
         self.iface.removePluginMenu("&Tracing plugins", self.action)
         self.iface.removeToolBarIcon(self.action)
 
     def run(self):
-        self.__pipeline = QgsProject.instance().mapLayersByName('pipelines_tracing')
-        self.__valves = QgsProject.instance().mapLayersByName('valves_tracing')
+        if self.dlg_config is None:
+            self.dlg_config = ConfigController()
 
-        if len(self.__pipeline) > 0 and len(self.__valves) > 0:
-            pipeline_select = self.iface.activeLayer().selectedFeatures()
-            if pipeline_select:
-                if len(pipeline_select) == 1:
-                    tracing_caj = TracingCAJ(self.__tm, self.__pipeline, self.__valves)
-                    tracing_caj.start()
-                else:
-                    self.iface.messageBar().pushMessage("Info",
-                                                        "Select only ONE network to start", level=Qgis.Info)
-                    print('Info - Select only ONE network to start')
-        else:
-            self.iface.messageBar().pushMessage("Info", 'Rename layers for "pipelines_tracing" and "valves_tracing" '
-                                                , level=Qgis.Info)
-            print('Rename layers for "pipelines_tracing" and "valves_tracing"')
+        mapLayers = QgsProject.instance().mapLayers() # Load layers dictionary from the project
+        layer_list = []
+
+        for _id in mapLayers.keys():
+            if mapLayers[_id].type() == QgsMapLayer.VectorLayer:
+                layer_list.append((mapLayers[_id].name(), _id))
+
+        if len(layer_list) == 0:
+            QMessageBox.information(None,
+                                    QCoreApplication.translate('GroupStats', 'Information'),
+                                    QCoreApplication.translate('GroupStats', 'Vector layers not found'))
+            return
+
+        self.dlg_config.iface = self.iface
+        self.dlg_config.set_layers(layer_list)
+        # show the dialog config
+        self.dlg_config.show()
+
 
     def error(self):
         self.iface.messageBar().pushMessage("Error occorred",
