@@ -1,3 +1,5 @@
+from collections import deque
+
 from qgis._core import QgsVectorLayer
 from qgis.core import (QgsTask,
                               QgsMessageLog,
@@ -20,13 +22,13 @@ class TracingPipelines(QgsTask):
         self.__user_distance = user_distance
         self._pipelines_features = pipelines
         self._valves_features = valves
-        self.__list_valves = []
-        self.__list_valves_not_visible = []
-        self.__list_valves_closed = []
-        self.__list_visited_pipelines = []
-        self.__list_visited_pipelines_ids = []
-        self.__q_list_pipelines = []
-        self.__q_list_pipelines_ids = []
+        self.__list_valves = set()
+        self.__list_valves_not_visible = set()
+        self.__list_valves_closed = set()
+        self.__list_visited_pipelines = set()
+        self.__list_visited_pipelines_ids = set()
+        self.__q_list_pipelines = deque()
+        self.__q_list_pipelines_ids = deque()
         self.__iterations = 0
         self.__exception = None
 
@@ -72,12 +74,12 @@ class TracingPipelines(QgsTask):
                 if self.isCanceled():
                     return False
 
-                pipeline = self.__q_list_pipelines.pop(0)
-                pipeline_id = self.__q_list_pipelines_ids.pop(0)
+                pipeline = self.__q_list_pipelines.pop()
+                pipeline_id = self.__q_list_pipelines_ids.pop()
 
                 if pipeline_id not in self.__list_visited_pipelines_ids:
-                    self.__list_visited_pipelines.append(pipeline)
-                    self.__list_visited_pipelines_ids.append(pipeline_id)
+                    self.__list_visited_pipelines.add(pipeline)
+                    self.__list_visited_pipelines_ids.add(pipeline_id)
 
                     QgsMessageLog.logMessage(f'|-> Analisando Pipeline {pipeline_id}', 'TracingCAJ', Qgis.Info)
 
@@ -114,18 +116,18 @@ class TracingPipelines(QgsTask):
 
         if result:
             # Seleciona os registros não visiveis
-            self._valves_features.selectByIds(self.__list_valves_not_visible)
+            self._valves_features.selectByIds(list(self.__list_valves_not_visible))
             names_valves_not_visible = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
 
             # Seleciona os registros não visiveis
-            self._valves_features.selectByIds(self.__list_valves_closed)
+            self._valves_features.selectByIds(list(self.__list_valves_closed))
             names_valves_closed = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
 
             # Seleciona os registros visiveis
-            self._valves_features.selectByIds(self.__list_valves)
+            self._valves_features.selectByIds(list(self.__list_valves))
             names_valves = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
 
-            self._pipelines_features.selectByIds(self.__list_visited_pipelines_ids)
+            self._pipelines_features.selectByIds(list(self.__list_visited_pipelines_ids))
 
             if self.onfinish:
                 self.onfinish()
@@ -200,11 +202,11 @@ class TracingPipelines(QgsTask):
                 Qgis.Info)
 
             if reg_isvisivel.upper() != 'NÃO' and reg_status == '0':
-                self.__list_valves.append(reg_nearest[0])
+                self.__list_valves.add(reg_nearest[0])
             elif reg_status == '1':
-                self.__list_valves_closed.append(reg_nearest[0])  # Registros já fechados
+                self.__list_valves_closed.add(reg_nearest[0])  # Registros já fechados
             else:
-                self.__list_valves_not_visible.append(reg_nearest[0])  # Registro não visível ou NULL
+                self.__list_valves_not_visible.add(reg_nearest[0])  # Registro não visível ou NULL
                 self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
         else:
             self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
@@ -233,9 +235,16 @@ class TracingPipelines(QgsTask):
 
 
 def is_downstream(origin_diameter, destination_diameter):
+    QgsMessageLog.logMessage(f'{origin_diameter} to {destination_diameter}', 'TracingCAJ', Qgis.Info)
     if origin_diameter > 100:
+        QgsMessageLog.logMessage(f'origin_diameter > 100', 'TracingCAJ', Qgis.Info)
         if destination_diameter <= 75:
+            QgsMessageLog.logMessage(f'origin_diameter > 100 && destination_diameter <= 75', 'TracingCAJ', Qgis.Info)
             return True
+        elif origin_diameter >= destination_diameter:
+            QgsMessageLog.logMessage(f'origin_diameter > 100 && origin_diameter <= destination_diameter', 'TracingCAJ', Qgis.Info)
+            return False
+
     if origin_diameter > destination_diameter:
         return True
     return False
