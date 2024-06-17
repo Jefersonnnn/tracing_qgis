@@ -184,7 +184,7 @@ class TracingPipelines(QgsTask):
         # Busca pelo registro mais próximo, dentro do raio maxDistance=user_distance
         reg_nearest = self.__idx_valves.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=1,
                                                         maxDistance=self.__user_distance)
-        QgsMessageLog.logMessage(f'|---> Nearest: {reg_nearest}', 'TracingCAJ', Qgis.Info)
+        QgsMessageLog.logMessage(f'|---> Valve Nearest: {reg_nearest}', 'TracingCAJ', Qgis.Info)
         if len(reg_nearest) > 0:
             _feature = list(self._valves_features.getFeatures(reg_nearest))[0]
 
@@ -236,6 +236,8 @@ def is_downstream(origin_diameter, destination_diameter):
     if origin_diameter > 100:
         if destination_diameter <= 75:
             return True
+    if origin_diameter > destination_diameter:
+        return True
     return False
 
 
