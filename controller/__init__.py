@@ -5,7 +5,8 @@ from PyQt5.QtCore import QSettings, QObject
 from qgis.core import (
     Qgis,
     QgsProject,
-    QgsApplication
+    QgsApplication,
+    QgsMessageLog
 )
 
 from view import ConfigDialog
@@ -125,8 +126,7 @@ class ConfigController:
             self._ui.layer_valves.addItem(i[0], i[1])
 
         if index_pipelines != -1:
-            index2 = self._ui.layer_pipelines.findData(
-                layerIdPipelines)  # if the previously selected layer is a list then select it
+            index2 = self._ui.layer_pipelines.findData(layerIdPipelines)  # if the previously selected layer is a list then select it
             if index2 != -1:
                 self._ui.layer_pipelines.setCurrentIndex(index2)
             else:
@@ -153,14 +153,16 @@ class ConfigController:
 
             if index_valves != -1 and index_pipelines != -1:
                 self._ui.layer_valves.setCurrentIndex(index_valves)
+                self.layerSelectionPipeline(index_pipelines)
                 self._ui.layer_pipelines.setCurrentIndex(index_pipelines)
+                self.layerSelectionValves(index_valves)
                 print("Configurações Carregadas!")
 
         self._ui.layer_pipelines.blockSignals(False)
         self._ui.layer_valves.blockSignals(False)
 
     def layerSelectionPipeline(self, index):  # finished
-        "Runs after selecting layer from the list. Sets a new list of fields to choose from and deletes windows with already selected fields"
+        """Runs after selecting layer from the list. Sets a new list of fields to choose from and deletes windows with already selected fields"""
 
         idPipelines = self._ui.layer_pipelines.itemData(index)  # Get the ID of the selected layer
         _layer_pipelines_selected = QgsProject.instance().mapLayer(idPipelines)  # .toString())
@@ -169,7 +171,7 @@ class ConfigController:
         self._valves = QgsProject.instance().mapLayersByName('valves_tracing')
 
     def layerSelectionValves(self, index):  # finished
-        "Runs after selecting layer from the list. Sets a new list of fields to choose from and deletes windows with already selected fields"
+        """Runs after selecting layer from the list. Sets a new list of fields to choose from and deletes windows with already selected fields"""
 
         idValves = self._ui.layer_pipelines.itemData(index)  # Get the ID of the selected layer
         _layer_valves_selected = QgsProject.instance().mapLayer(idValves)  # .toString())

@@ -235,14 +235,10 @@ class TracingPipelines(QgsTask):
 
 
 def is_downstream(origin_diameter, destination_diameter):
-    QgsMessageLog.logMessage(f'{origin_diameter} to {destination_diameter}', 'TracingCAJ', Qgis.Info)
     if origin_diameter > 100:
-        QgsMessageLog.logMessage(f'origin_diameter > 100', 'TracingCAJ', Qgis.Info)
         if destination_diameter <= 75:
-            QgsMessageLog.logMessage(f'origin_diameter > 100 && destination_diameter <= 75', 'TracingCAJ', Qgis.Info)
             return True
         elif origin_diameter >= destination_diameter:
-            QgsMessageLog.logMessage(f'origin_diameter > 100 && origin_diameter <= destination_diameter', 'TracingCAJ', Qgis.Info)
             return False
 
     if origin_diameter > destination_diameter:
