@@ -13,6 +13,7 @@ from core.task_manager import TracingCAJ
 
 import global_vars
 
+
 class ConfigController:
 
     def __init__(self):
@@ -22,6 +23,7 @@ class ConfigController:
         self._ui.layer_valves.currentIndexChanged.connect(self.layerSelectionValves)
 
         self._ui.btn_iniciar_tracing.clicked.connect(self.start_tracing)
+        self._ui.btn_salvar_configs.clicked.connect(self.save_configs)
 
         # Task Manager
         self.__tm = QgsApplication.taskManager()
@@ -33,32 +35,67 @@ class ConfigController:
         if self.iface is None:
             self.iface = global_vars.iface
 
+    def set_enable_button_iniciar(self):
+        self._ui.btn_iniciar_tracing.setEnabled(True)
+
+    def set_disable_button_inicial(self):
+        self._ui.btn_iniciar_tracing.setEnabled(False)
+
+    def save_configs(self):
+        index_pipelines = self._ui.layer_pipelines.currentIndex()
+        index_valves = self._ui.layer_valves.currentIndex()
+
+        layerIdPipelines = None
+        layerIdValves = None
+
+        if index_pipelines != -1:
+            layerIdPipelines = self._ui.layer_pipelines.itemData(index_pipelines)
+
+        if index_valves != -1:
+            layerIdValves = self._ui.layer_valves.itemData(index_valves)
+
+        if layerIdPipelines and layerIdValves:
+            Settings().save_params(layerIdPipelines, layerIdValves)
+            self.set_status_msg('Configurações salvas')
+            return
+
+        self.set_status_msg('Não foi possível salvar as configurações')
+
     def show(self):
         # Exibe a tela de configurações
-        self._ui.exec_()
+        # self._ui.exec_()
+        self._ui.show()
 
     def start_tracing(self):
         self.set_status_msg("Iniciando...")
-        if len(self._pipelines) > 0 and len(self._valves) > 0:
-            pipeline_select = self.iface.activeLayer().selectedFeatures()
-            if pipeline_select:
-                if len(pipeline_select) == 1:
-                    tracing_caj = TracingCAJ(self.__tm, self._pipelines, self._valves, callback_msg=self.set_status_msg)
-                    self.set_status_msg("Aguarde finalizar...")
-                    tracing_caj.start()
+        try:
+            if len(self._pipelines) > 0 and len(self._valves) > 0:
+                pipeline_select = self.iface.activeLayer().selectedFeatures()
+                if pipeline_select:
+                    if len(pipeline_select) == 1:
+                        self.set_disable_button_inicial()
+                        tracing_caj = TracingCAJ(
+                            task_manager=self.__tm,
+                            pipelines=self._pipelines,
+                            valves=self._valves,
+                            parent=self)
+                        self.set_status_msg("Aguarde finalizar...")
+                        tracing_caj.start()
+                    else:
+                        self.set_status_msg("Selecione apenas uma rede para iniciar...")
+                        self.iface.messageBar().pushMessage("Info",
+                                                            "Select only ONE network to start", level=Qgis.Info)
                 else:
-                    self.set_status_msg("Selecione apenas uma rede para iniciar...")
-                    self.iface.messageBar().pushMessage("Info",
-                                                        "Select only ONE network to start", level=Qgis.Info)
+                    self.set_status_msg("Selecione uma rede no mapa para iniciar!")
+                    self.iface.messageBar().pushMessage("Info", 'Nenhuma rede selecionada!" '
+                                                        , level=Qgis.Info)
             else:
-                self.set_status_msg("Selecione uma rede no mapa para iniciar!")
-                self.iface.messageBar().pushMessage("Info", 'Nenhuma rede selecionada!" '
+                self.set_status_msg("Referencia para as redes e registros não encontrada!")
+                self.iface.messageBar().pushMessage("Info", 'Referencia para as redes e registros não encontrada!" '
                                                     , level=Qgis.Info)
-        else:
-            self.set_status_msg("Referencia para as redes e registros não encontrada!")
-            self.iface.messageBar().pushMessage("Info", 'Referencia para as redes e registros não encontrada!" '
-                                                , level=Qgis.Info)
-
+        except Exception as e:
+            print(e)
+            self.set_enable_button_iniciar()
 
     def set_layers(self, layer):
         """
@@ -66,6 +103,7 @@ class ConfigController:
         :param layer:
         :return:
         """
+
         index_pipelines = self._ui.layer_pipelines.currentIndex()
         index_valves = self._ui.layer_valves.currentIndex()
 
@@ -106,6 +144,18 @@ class ConfigController:
         else:
             self.layerSelectionValves(0)
 
+        id_pipelines, id_valves = Settings().get_params()
+
+        if id_pipelines and id_valves:
+
+            index_valves = self._ui.layer_valves.findData(id_valves)
+            index_pipelines = self._ui.layer_pipelines.findData(id_pipelines)
+
+            if index_valves != -1 and index_pipelines != -1:
+                self._ui.layer_valves.setCurrentIndex(index_valves)
+                self._ui.layer_pipelines.setCurrentIndex(index_pipelines)
+                print("Configurações Carregadas!")
+
         self._ui.layer_pipelines.blockSignals(False)
         self._ui.layer_valves.blockSignals(False)
 
@@ -129,80 +179,28 @@ class ConfigController:
     def set_status_msg(self, msg):
         self._ui.lbl_status.setText(msg)
 
+    def set_final_msg(self, msg):
+        self._ui.txt_list_valves.clear()
+        self._ui.txt_list_valves.setText(msg)
+
 
 class Settings:
     """Gerenciar configurações da aplicação utilizando o QSettings"""
 
-    sections_sansys = 'BD_SANSYS'
-    sections_sde = 'BD_SDE'
-    section_ftp = 'FTP'
+    sections = 'TRACING'
 
     def __init__(self):
         # Cria o arquivo de configurações
         self._settings = QSettings('ANALISE_EXTRAVASAMENTO', 'ANALISE_EXTRAVASAMENTO')
 
-    def save_params_db(self, driver, host, db, user, password, trust_connection=False):
-        # todo: verificar se o settings são salvos para todos os usuários ou apenas para o usuário logado
-        # Salva os parâmetros de conexão com o banco de dados
-        self._settings.setValue(self.sections_sansys + '/driver', driver)
-        self._settings.setValue(self.sections_sansys + '/host', host)
-        self._settings.setValue(self.sections_sansys + '/db', db)
-        self._settings.setValue(self.sections_sansys + '/user', user)
-        self._settings.setValue(self.sections_sansys + '/password',
-                                base64.b64encode(password.encode('utf-8')) if password else None)
-        self._settings.setValue(self.sections_sansys + '/trust_connection', 'yes' if trust_connection else 'no')
+    def save_params(self, id_pipelines, id_valves):
+        # Salvar os ids das camadas de rede e registros
+        self._settings.setValue(self.sections + '/id_pipeline', id_pipelines)
+        self._settings.setValue(self.sections + '/id_valves', id_valves)
 
-    def save_params_db_sde(self, host, port, db, user, password):
-        # Salva os parâmetros de conexão com o banco de dados
-        self._settings.setValue(self.sections_sde + '/host_sde', host)
-        self._settings.setValue(self.sections_sde + '/port_sde', port)
-        self._settings.setValue(self.sections_sde + '/db_sde', db)
-        self._settings.setValue(self.sections_sde + '/user_sde', user)
-        self._settings.setValue(self.sections_sde + '/password_sde',
-                                base64.b64encode(password.encode('utf-8')) if password else None)
+    def get_params(self):
+        # Retorna os ids das camadas de rede e registros
+        id_pipelines = self._settings.value(self.sections + '/id_pipeline')
+        id_valves = self._settings.value(self.sections + '/id_valves')
 
-    def save_params_ftp(self, host, port, user, password, root_path_ftp):
-        # Salva os parâmetros de conexão com o banco de dados
-        self._settings.setValue(self.section_ftp + '/host_ftp', host)
-        self._settings.setValue(self.section_ftp + '/port_ftp', port)
-        self._settings.setValue(self.section_ftp + '/user_ftp', user)
-        self._settings.setValue(self.section_ftp + '/password_ftp',
-                                base64.b64encode(password.encode('utf-8')) if password else None)
-        self._settings.setValue(self.section_ftp + '/root_path_ftp', root_path_ftp)
-
-    def get_params_ftp(self) -> (str, str, str, str, str):
-        """Retorna os parâmetros de conexão com o FTP
-        :return: host, port, user, password, root_path_ftp
-        """
-        # Retorna os parâmetros de conexão com o FTP
-        host = self._settings.value(self.section_ftp + '/host_ftp', 'ftpinterno')
-        port = self._settings.value(self.section_ftp + '/port_ftp', '21')
-        user = self._settings.value(self.section_ftp + '/user_ftp', 'ftp.qfield')
-        root_path = self._settings.value(self.section_ftp + '/root_path_ftp',
-                                         'Usuários/francisco.hoffmann/Extravasamentos/')
-        password = self._settings.value(self.section_ftp + '/password_ftp', '')
-        password = base64.b64decode(password).decode('utf-8') if password else None
-        return host, port, user, password, root_path
-
-    def get_params_db_sde(self):
-        # Retorna os parâmetros de conexão com o banco de dados
-        host = self._settings.value(self.sections_sde + '/host_sde', '10.45.0.24')
-        port = self._settings.value(self.sections_sde + '/port_sde', '5432')
-        db = self._settings.value(self.sections_sde + '/db_sde', 'simgeo')
-        user = self._settings.value(self.sections_sde + '/user_sde')
-        password = self._settings.value(self.sections_sde + '/password_sde')
-        password = base64.b64decode(password).decode('utf-8') if password else None
-        return host, port, db, user, password
-
-    def get_params_db(self):
-        # Retorna os parâmetros de conexão com o banco de dados
-        driver = self._settings.value(self.sections_sansys + '/driver')
-        host = self._settings.value(self.sections_sansys + '/host', 'poseidon')
-        db = self._settings.value(self.sections_sansys + '/db', 'sansys_readonly')
-        user = self._settings.value(self.sections_sansys + '/user')
-        password = self._settings.value(self.sections_sansys + '/password')
-        password = base64.b64decode(password).decode('utf-8') if password else None
-        trust_connection = 'yes' if self._settings.value(
-            self.sections_sansys + '/trust_connection') == 1 or self._settings.value(
-            self.sections_sansys + '/trust_connection') == 'yes' else 'no'
-        return driver, host, db, user, password, trust_connection
+        return id_pipelines, id_valves

@@ -31,7 +31,7 @@ FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), r'ui\config_dialog.ui'))
 
 
-class ConfigDialog(QtWidgets.QDialog, FORM_CLASS):
+class ConfigDialog(QtWidgets.QDialog, QtWidgets.QMainWindow, FORM_CLASS):
     def __init__(self, controller, parent=None):
         """Constructor."""
         super(ConfigDialog, self).__init__(parent)

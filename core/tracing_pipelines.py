@@ -1,17 +1,18 @@
 from qgis._core import QgsVectorLayer
 from qgis.core import (QgsTask,
-                       QgsMessageLog,
-                       Qgis,
-                       QgsSpatialIndex,
-                       QgsPointXY,
-                       QgsProject, QgsApplication)
+                              QgsMessageLog,
+                              Qgis,
+                              QgsSpatialIndex,
+                              QgsPointXY,
+                              QgsProject, QgsApplication)
 
 import global_vars
+import threading
 
 
 class TracingPipelines(QgsTask):
-
-    def __init__(self, pipelines, valves, description='TracingCAJ', user_distance=0.001, onfinish=None, debug=False, callback_msg=None):
+    def __init__(self, pipelines, valves, description='TracingCAJ', user_distance=0.001, onfinish=None, debug=False,
+                 parent=None):
         super().__init__(description, QgsTask.CanCancel)
 
         self.onfinish = onfinish
@@ -20,7 +21,8 @@ class TracingPipelines(QgsTask):
         self._pipelines_features = pipelines
         self._valves_features = valves
         self.__list_valves = []
-        self.__list_valves_not_visibles = []
+        self.__list_valves_not_visible = []
+        self.__list_valves_closed = []
         self.__list_visited_pipelines = []
         self.__list_visited_pipelines_ids = []
         self.__q_list_pipelines = []
@@ -29,7 +31,7 @@ class TracingPipelines(QgsTask):
         self.__exception = None
 
         # Callbackmsg
-        self._callback_msg = callback_msg
+        self._parent = parent
 
         # Cria os índices espaciais
         self.__idx_pipelines = None
@@ -52,6 +54,7 @@ class TracingPipelines(QgsTask):
             # self._pipelines_features.getFeatures(16)
 
         selected_pipeline = self._pipelines_features.selectedFeatures()
+        print(selected_pipeline)
 
         if len(selected_pipeline) != 1:
             QgsMessageLog.logMessage('Selecione apenas UMA rede', 'TracingCAJ', Qgis.Info)
@@ -85,27 +88,42 @@ class TracingPipelines(QgsTask):
                         v2 = pipeline.vertexAt(len(pipeline.get()) - 1)
 
                     try:
-                        if self._callback_msg:
-                            self._callback_msg(f'Carregando... - {self.__iterations}')
-                        QgsMessageLog.logMessage(f'|--> Analisando vertex {str(v1)}', 'TracingCAJ', Qgis.Info)
-                        self.__find_neighbors(v1, pipeline_id)
+                        # Cria uma nova thread para cada pipeline
 
-                        QgsMessageLog.logMessage(f'|--> Analisando vertex {v2}', 'TracingCAJ', Qgis.Info)
-                        self.__find_neighbors(v2, pipeline_id)
+                        thread1 = threading.Thread(target=self.__find_neighbors, args=(v1, pipeline_id))
+                        thread2 = threading.Thread(target=self.__find_neighbors, args=(v2, pipeline_id))
+
+                        # Inicia as threads
+                        thread1.start()
+                        thread2.start()
+
+                        # Aguarda as threads concluírem
+                        thread1.join()
+                        thread2.join()
                     except Exception as e:
+                        print(e)
                         self.__exception = e
                         return False
         return True
 
     def finished(self, result):
-        if result:
-            # Seleciona os registro não visiveis
-            self._valves_features.selectByIds(self.__list_valves_not_visibles)
-            names_valves_not_visibels = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
+        # Ativa novamente o botão
 
-            # Seleciona os registro visiveis
+        if not self.debug:
+            self._parent.set_enable_button_iniciar()
+
+        if result:
+            # Seleciona os registros não visiveis
+            self._valves_features.selectByIds(self.__list_valves_not_visible)
+            names_valves_not_visible = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
+
+            # Seleciona os registros não visiveis
+            self._valves_features.selectByIds(self.__list_valves_closed)
+            names_valves_closed = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
+
+            # Seleciona os registros visiveis
             self._valves_features.selectByIds(self.__list_valves)
-            names_valves = [feat['nome'] for feat in self._valves_features.selectedFeatures()]
+            names_valves = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
 
             self._pipelines_features.selectByIds(self.__list_visited_pipelines_ids)
 
@@ -113,9 +131,10 @@ class TracingPipelines(QgsTask):
                 self.onfinish()
 
             QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly\n"
-                                     f"Iterations: {self.__iterations}\n"
-                                     f"Valves: {names_valves}\n"
-                                     f"Valves not visibles: {names_valves_not_visibels}",
+                                     f"Iterações: {self.__iterations}\n"
+                                     f"Registros: {names_valves}\n"
+                                     f"Registros fechados: {names_valves_closed}\n"
+                                     f"Registro não visíveis: {names_valves_not_visible}",
                                      level=Qgis.Success)
             # copy to clipboard
             self.iface.messageBar().pushMessage(
@@ -124,10 +143,17 @@ class TracingPipelines(QgsTask):
                 f"Copy to clipboard: {names_valves}",
                 level=Qgis.Success,
                 duration=10)
-            if self._callback_msg:
-                self._callback_msg('Finalizando! registros no CTRL+V')
-            QgsApplication.clipboard().setText(','.join(names_valves))
 
+            if self._parent:
+                self._parent.set_status_msg('Finalizado! registros no CTRL+V')
+
+            if self._parent:
+                self._parent.set_final_msg(f"Registros: {','.join(names_valves)}\n"
+                                           f"Registro fechados: {','.join(names_valves_closed)}\n"
+                                           f"Registro não visíveis: {','.join(names_valves_not_visible)}"
+                                           )
+
+            QgsApplication.clipboard().setText(','.join(names_valves))
         else:
             if self.__exception is None:
                 QgsMessageLog.logMessage(f"Tracing {self.description()} not successful "
@@ -140,6 +166,7 @@ class TracingPipelines(QgsTask):
                 raise self.__exception
 
     def cancel(self):
+        print(f'TracingTrask {self.description()} was canceled')
         QgsMessageLog.logMessage(
             f'TracingTrask {self.description()} was canceled', level=Qgis.Info)
         super().cancel()
@@ -165,8 +192,8 @@ class TracingPipelines(QgsTask):
                                      Qgis.Info)
             # visivel = 'sim' = registro visível | visivel = 'não' = registro não visível
             reg_isvisivel = str(_feature['visivel'])
-            # status = 0 = 'Aberto' | status = 1 = 'Fechado'
-            reg_status = str(_feature['status'])
+            # status_operacao = 0 = 'Aberto' | status = 1 = 'Fechado'
+            reg_status = str(_feature['status_operacao'])
 
             QgsMessageLog.logMessage(
                 f'|----> Valve {reg_nearest[0]} | visivel is {reg_isvisivel} and status is {reg_status}', 'TracingCAJ',
@@ -174,8 +201,10 @@ class TracingPipelines(QgsTask):
 
             if reg_isvisivel.upper() != 'NÃO' and reg_status == '0':
                 self.__list_valves.append(reg_nearest[0])
+            elif reg_status == '1':
+                self.__list_valves_closed.append(reg_nearest[0])  # Registros já fechados
             else:
-                self.__list_valves_not_visibles.append(reg_nearest[0])  # Registro não visível ou NULL
+                self.__list_valves_not_visible.append(reg_nearest[0])  # Registro não visível ou NULL
                 self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
         else:
             self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
@@ -190,8 +219,8 @@ class TracingPipelines(QgsTask):
                 if pipeline_origin_id:
 
                     origin_diameter = list(self._pipelines_features.getFeatures([pipeline_origin_id]))[0][
-                        'diametro']
-                    pipeline_diameter = list(self._pipelines_features.getFeatures([pipeline_id]))[0]['diametro']
+                        'diametro_nominal']
+                    pipeline_diameter = list(self._pipelines_features.getFeatures([pipeline_id]))[0]['diametro_nominal']
                     if is_downstream(origin_diameter, pipeline_diameter):
                         continue
                         # self.__list_visited_pipelines.append(self.__idx_pipelines.geometry(pipeline_id))
@@ -211,8 +240,8 @@ def is_downstream(origin_diameter, destination_diameter):
 
 
 if __name__ == '__main__':
-    path_to_pipeline_layer = "C:\\Users\\jeferson.machado\\Desktop\\QGIS\\shapes\\rede_agua_tracing.shp"
-    path_to_valves_layer = "C:\\Users\\jeferson.machado\\Desktop\\QGIS\\shapes\\registro_manobra.shp"
+    path_to_pipeline_layer = "C:\\Users\\jeferson.machado\\OneDrive - CAJ\\Área de Trabalho\\QGIS\\shapes\\rede_agua_tracing.shp"
+    path_to_valves_layer   = "C:\\Users\\jeferson.machado\\OneDrive - CAJ\\Área de Trabalho\\QGIS\\shapes\\registro_manobra.shp"
 
     pipelines = QgsVectorLayer(path_to_pipeline_layer, "pipelines_tracing", "ogr")
     valves = QgsVectorLayer(path_to_valves_layer, "valves_tracing", "ogr")
@@ -222,8 +251,9 @@ if __name__ == '__main__':
         QgsProject.instance().addMapLayer(pipelines)
         QgsProject.instance().addMapLayer(valves)
 
-    pipe_features = QgsProject.instance().mapLayersByName('pipelines_tracing')
-    valves_features = QgsProject.instance().mapLayersByName('valves_tracing')
+    pipe_features = QgsProject.instance().mapLayersByName('pipelines_tracing')[0]
+    valves_features = QgsProject.instance().mapLayersByName('valves_tracing')[0]
 
     tracing = TracingPipelines(pipe_features, valves_features, debug=True)
-    tracing.run()
+    result_finish = tracing.run()
+    tracing.finished(result_finish)
