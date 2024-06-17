@@ -90,3 +90,6 @@ class Tracing:
 
         # add toolbar button and menu item
         self.iface.addToolBarIcon(self.action)
+
+if __name__ == '__main__':
+    Tracing().run()

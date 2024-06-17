@@ -25,9 +25,6 @@ class ConfigController:
         self._ui.btn_iniciar_tracing.clicked.connect(self.start_tracing)
         self._ui.btn_salvar_configs.clicked.connect(self.save_configs)
 
-        # Flag para controle do status do botão
-        self._status_button_iniciar = True
-
         # Task Manager
         self.__tm = QgsApplication.taskManager()
 
@@ -38,13 +35,11 @@ class ConfigController:
         if self.iface is None:
             self.iface = global_vars.iface
 
-    def toggle_button_iniciar(self):
-        if self._status_button_iniciar:
-            self._ui.btn_iniciar_tracing.setEnabled(False)
-            self._status_button_iniciar = False
-        else:
-            self._ui.btn_iniciar_tracing.setEnabled(True)
-            self._status_button_iniciar = True
+    def set_enable_button_iniciar(self):
+        self._ui.btn_iniciar_tracing.setEnabled(True)
+
+    def set_disable_button_inicial(self):
+        self._ui.btn_iniciar_tracing.setEnabled(False)
 
     def save_configs(self):
         index_pipelines = self._ui.layer_pipelines.currentIndex()
@@ -52,6 +47,7 @@ class ConfigController:
 
         layerIdPipelines = None
         layerIdValves = None
+
         if index_pipelines != -1:
             layerIdPipelines = self._ui.layer_pipelines.itemData(index_pipelines)
 
@@ -61,6 +57,7 @@ class ConfigController:
         if layerIdPipelines and layerIdValves:
             Settings().save_params(layerIdPipelines, layerIdValves)
             self.set_status_msg('Configurações salvas')
+            return
 
         self.set_status_msg('Não foi possível salvar as configurações')
 
@@ -71,26 +68,34 @@ class ConfigController:
 
     def start_tracing(self):
         self.set_status_msg("Iniciando...")
-        if len(self._pipelines) > 0 and len(self._valves) > 0:
-            pipeline_select = self.iface.activeLayer().selectedFeatures()
-            if pipeline_select:
-                if len(pipeline_select) == 1:
-                    self.toggle_button_iniciar()
-                    tracing_caj = TracingCAJ(self.__tm, self._pipelines, self._valves, parent=self)
-                    self.set_status_msg("Aguarde finalizar...")
-                    tracing_caj.start()
+        try:
+            if len(self._pipelines) > 0 and len(self._valves) > 0:
+                pipeline_select = self.iface.activeLayer().selectedFeatures()
+                if pipeline_select:
+                    if len(pipeline_select) == 1:
+                        self.set_disable_button_inicial()
+                        tracing_caj = TracingCAJ(
+                            task_manager=self.__tm,
+                            pipelines=self._pipelines,
+                            valves=self._valves,
+                            parent=self)
+                        self.set_status_msg("Aguarde finalizar...")
+                        tracing_caj.start()
+                    else:
+                        self.set_status_msg("Selecione apenas uma rede para iniciar...")
+                        self.iface.messageBar().pushMessage("Info",
+                                                            "Select only ONE network to start", level=Qgis.Info)
                 else:
-                    self.set_status_msg("Selecione apenas uma rede para iniciar...")
-                    self.iface.messageBar().pushMessage("Info",
-                                                        "Select only ONE network to start", level=Qgis.Info)
+                    self.set_status_msg("Selecione uma rede no mapa para iniciar!")
+                    self.iface.messageBar().pushMessage("Info", 'Nenhuma rede selecionada!" '
+                                                        , level=Qgis.Info)
             else:
-                self.set_status_msg("Selecione uma rede no mapa para iniciar!")
-                self.iface.messageBar().pushMessage("Info", 'Nenhuma rede selecionada!" '
+                self.set_status_msg("Referencia para as redes e registros não encontrada!")
+                self.iface.messageBar().pushMessage("Info", 'Referencia para as redes e registros não encontrada!" '
                                                     , level=Qgis.Info)
-        else:
-            self.set_status_msg("Referencia para as redes e registros não encontrada!")
-            self.iface.messageBar().pushMessage("Info", 'Referencia para as redes e registros não encontrada!" '
-                                                , level=Qgis.Info)
+        except Exception as e:
+            print(e)
+            self.set_enable_button_iniciar()
 
     def set_layers(self, layer):
         """
@@ -140,15 +145,16 @@ class ConfigController:
             self.layerSelectionValves(0)
 
         id_pipelines, id_valves = Settings().get_params()
+
         if id_pipelines and id_valves:
-            index_valves = self._ui.layer_pipelines.findData(layerIdPipelines)
-            index_pipelines = self._ui.layer_valves.findData(id_valves)
 
-            if index_valves != -1:
+            index_valves = self._ui.layer_valves.findData(id_valves)
+            index_pipelines = self._ui.layer_pipelines.findData(id_pipelines)
+
+            if index_valves != -1 and index_pipelines != -1:
                 self._ui.layer_valves.setCurrentIndex(index_valves)
-
-            if index_pipelines != -1:
                 self._ui.layer_pipelines.setCurrentIndex(index_pipelines)
+                print("Configurações Carregadas!")
 
         self._ui.layer_pipelines.blockSignals(False)
         self._ui.layer_valves.blockSignals(False)

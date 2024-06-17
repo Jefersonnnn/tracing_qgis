@@ -1,10 +1,10 @@
 from qgis._core import QgsVectorLayer, QgsFeature, QgsGeometry
 from qgis.core import (QgsTask,
-                       QgsMessageLog,
-                       Qgis,
-                       QgsSpatialIndex,
-                       QgsPointXY,
-                       QgsProject, QgsApplication)
+                              QgsMessageLog,
+                              Qgis,
+                              QgsSpatialIndex,
+                              QgsPointXY,
+                              QgsProject, QgsApplication)
 
 
 class LancamentoRamal(QgsTask):
