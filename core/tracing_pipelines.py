@@ -19,16 +19,20 @@ class TracingPipelines(QgsTask):
 
         self.onfinish = onfinish
         self.debug = debug
-        self.__user_distance = user_distance
+
+        self._user_distance = user_distance
         self._pipelines_features = pipelines
         self._valves_features = valves
-        self.__list_valves = set()
-        self.__list_valves_not_visible = set()
-        self.__list_valves_closed = set()
-        self.__list_visited_pipelines = set()
-        self.__list_visited_pipelines_ids = set()
-        self.__q_list_pipelines = deque()
-        self.__q_list_pipelines_ids = deque()
+
+        self._first_pipeline_dn = None
+        self._list_valves = set()
+        self._list_valves_not_visible = set()
+        self._list_valves_closed = set()
+        self._list_visited_pipelines = set()
+        self._list_visited_pipelines_ids = set()
+        self._q_list_pipelines = deque()
+        self._q_list_pipelines_ids = deque()
+
         self.__iterations = 0
         self.__exception = None
 
@@ -56,17 +60,17 @@ class TracingPipelines(QgsTask):
             # self._pipelines_features.getFeatures(16)
 
         selected_pipeline = self._pipelines_features.selectedFeatures()
-        print(selected_pipeline)
 
         if len(selected_pipeline) != 1:
             QgsMessageLog.logMessage('Selecione apenas UMA rede', 'TracingCAJ', Qgis.Info)
             return False
         else:
 
-            self.__q_list_pipelines.append(selected_pipeline[0].geometry())
-            self.__q_list_pipelines_ids.append(selected_pipeline[0].id())
+            self._first_pipeline_dn = self._get_pipeline_dn(selected_pipeline[0].id())
+            self._q_list_pipelines.append(selected_pipeline[0].geometry())
+            self._q_list_pipelines_ids.append(selected_pipeline[0].id())
 
-            while len(self.__q_list_pipelines) > 0:
+            while len(self._q_list_pipelines) > 0:
                 self.__iterations += 1
                 QgsMessageLog.logMessage(f'Iteration {self.__iterations}', 'TracingCAJ', Qgis.Info)
 
@@ -74,12 +78,12 @@ class TracingPipelines(QgsTask):
                 if self.isCanceled():
                     return False
 
-                pipeline = self.__q_list_pipelines.pop()
-                pipeline_id = self.__q_list_pipelines_ids.pop()
+                pipeline = self._q_list_pipelines.pop()
+                pipeline_id = self._q_list_pipelines_ids.pop()
 
-                if pipeline_id not in self.__list_visited_pipelines_ids:
-                    self.__list_visited_pipelines.add(pipeline)
-                    self.__list_visited_pipelines_ids.add(pipeline_id)
+                if pipeline_id not in self._list_visited_pipelines_ids:
+                    self._list_visited_pipelines.add(pipeline)
+                    self._list_visited_pipelines_ids.add(pipeline_id)
 
                     QgsMessageLog.logMessage(f'|-> Analisando Pipeline {pipeline_id}', 'TracingCAJ', Qgis.Info)
 
@@ -116,18 +120,18 @@ class TracingPipelines(QgsTask):
 
         if result:
             # Seleciona os registros não visiveis
-            self._valves_features.selectByIds(list(self.__list_valves_not_visible))
+            self._valves_features.selectByIds(list(self._list_valves_not_visible))
             names_valves_not_visible = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
 
             # Seleciona os registros não visiveis
-            self._valves_features.selectByIds(list(self.__list_valves_closed))
+            self._valves_features.selectByIds(list(self._list_valves_closed))
             names_valves_closed = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
 
             # Seleciona os registros visiveis
-            self._valves_features.selectByIds(list(self.__list_valves))
+            self._valves_features.selectByIds(list(self._list_valves))
             names_valves = [feat['codigo'] for feat in self._valves_features.selectedFeatures()]
 
-            self._pipelines_features.selectByIds(list(self.__list_visited_pipelines_ids))
+            self._pipelines_features.selectByIds(list(self._list_visited_pipelines_ids))
 
             if self.onfinish:
                 self.onfinish()
@@ -185,7 +189,7 @@ class TracingPipelines(QgsTask):
 
         # Busca pelo registro mais próximo, dentro do raio maxDistance=user_distance
         reg_nearest = self.__idx_valves.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=1,
-                                                        maxDistance=self.__user_distance)
+                                                        maxDistance=self._user_distance)
         QgsMessageLog.logMessage(f'|---> Valve Nearest: {reg_nearest}', 'TracingCAJ', Qgis.Info)
         if len(reg_nearest) > 0:
             _feature = list(self._valves_features.getFeatures(reg_nearest))[0]
@@ -202,11 +206,11 @@ class TracingPipelines(QgsTask):
                 Qgis.Info)
 
             if reg_isvisivel.upper() != 'NÃO' and reg_status == '0':
-                self.__list_valves.add(reg_nearest[0])
+                self._list_valves.add(reg_nearest[0])
             elif reg_status == '1':
-                self.__list_valves_closed.add(reg_nearest[0])  # Registros já fechados
+                self._list_valves_closed.add(reg_nearest[0])  # Registros já fechados
             else:
-                self.__list_valves_not_visible.add(reg_nearest[0])  # Registro não visível ou NULL
+                self._list_valves_not_visible.add(reg_nearest[0])  # Registro não visível ou NULL
                 self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
         else:
             self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
@@ -215,35 +219,38 @@ class TracingPipelines(QgsTask):
         QgsMessageLog.logMessage(f'|----> Vertexis not near any valve', 'TracingCAJ', Qgis.Info)
         # Busca pelas 4 redes mais próximas no raio maxDistance=user_distance
         pipelines_nearest = self.__idx_pipelines.nearestNeighbor(point=QgsPointXY(point_vertex), neighbors=4,
-                                                                 maxDistance=self.__user_distance)
+                                                                 maxDistance=self._user_distance)
         if len(pipelines_nearest) > 0:
             for pipeline_id in pipelines_nearest:
                 if pipeline_origin_id:
 
-                    origin_diameter = list(self._pipelines_features.getFeatures([pipeline_origin_id]))[0][
-                        'diametro_nominal']
-                    pipeline_diameter = list(self._pipelines_features.getFeatures([pipeline_id]))[0]['diametro_nominal']
-                    if is_downstream(origin_diameter, pipeline_diameter):
+                    origin_diameter = self._get_pipeline_dn(pipeline_origin_id)
+                    pipeline_diameter = self._get_pipeline_dn(pipeline_id)
+
+                    if self.is_downstream(origin_diameter, pipeline_diameter):
                         continue
-                        # self.__list_visited_pipelines.append(self.__idx_pipelines.geometry(pipeline_id))
-                        # self.__list_visited_pipelines_ids.append(pipeline_id)
+                        # self._list_visited_pipelines.append(self.__idx_pipelines.geometry(pipeline_id))
+                        # self._list_visited_pipelines_ids.append(pipeline_id)
 
                 pipeline_geometry = self.__idx_pipelines.geometry(pipeline_id)
-                if pipeline_id not in self.__list_visited_pipelines_ids:
-                    self.__q_list_pipelines_ids.append(pipeline_id)
-                    self.__q_list_pipelines.append(pipeline_geometry)
+                if pipeline_id not in self._list_visited_pipelines_ids:
+                    self._q_list_pipelines_ids.append(pipeline_id)
+                    self._q_list_pipelines.append(pipeline_geometry)
 
+    def _get_pipeline_dn(self, pipeline_id):
+        return list(self._pipelines_features.getFeatures([pipeline_id]))[0]['diametro_nominal']
 
-def is_downstream(origin_diameter, destination_diameter):
-    if origin_diameter > 100:
-        if destination_diameter <= 75:
+    def is_downstream(self, origin_diameter, destination_diameter):
+        if origin_diameter >= 100:
+            if destination_diameter <= 75:
+                return True
+            elif origin_diameter >= destination_diameter:
+                return False
+        elif origin_diameter == self._first_pipeline_dn and destination_diameter <= 100:
+                return False
+        if origin_diameter > destination_diameter:
             return True
-        elif origin_diameter >= destination_diameter:
-            return False
-
-    if origin_diameter > destination_diameter:
-        return True
-    return False
+        return False
 
 
 if __name__ == '__main__':
