@@ -107,9 +107,6 @@ view/        Qt Designer dialog (view/ui/config_dialog.ui)
 tracing.py   plugin entry point (initGui / unload)
 ```
 
-See [PERFORMANCE.md](PERFORMANCE.md) for a performance analysis and the rationale
-behind the current implementation.
-
 ## License
 
 GNU General Public License v2.0 or later — see [LICENSE](LICENSE).
