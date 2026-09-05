@@ -28,7 +28,7 @@ except:
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
-    os.path.dirname(__file__), r'ui\config_dialog.ui'))
+    os.path.dirname(__file__), 'ui', 'config_dialog.ui'))
 
 
 class ConfigDialog(QtWidgets.QDialog, QtWidgets.QMainWindow, FORM_CLASS):

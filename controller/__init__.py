@@ -1,6 +1,4 @@
-import base64
-
-from PyQt5.QtCore import QSettings, QObject
+from qgis.PyQt.QtCore import QSettings
 
 from qgis.core import (
     Qgis,
@@ -70,7 +68,7 @@ class ConfigController:
     def start_tracing(self):
         self.set_status_msg("Iniciando...")
         try:
-            if len(self._pipelines) > 0 and len(self._valves) > 0:
+            if self._pipelines is not None and self._valves is not None:
                 pipeline_select = self.iface.activeLayer().selectedFeatures()
                 if pipeline_select:
                     if len(pipeline_select) == 1:
@@ -168,12 +166,11 @@ class ConfigController:
         _layer_pipelines_selected = QgsProject.instance().mapLayer(idPipelines)  # .toString())
 
         self._pipelines = _layer_pipelines_selected
-        self._valves = QgsProject.instance().mapLayersByName('valves_tracing')
 
     def layerSelectionValves(self, index):  # finished
         """Runs after selecting layer from the list. Sets a new list of fields to choose from and deletes windows with already selected fields"""
 
-        idValves = self._ui.layer_pipelines.itemData(index)  # Get the ID of the selected layer
+        idValves = self._ui.layer_valves.itemData(index)  # Get the ID of the selected layer
         _layer_valves_selected = QgsProject.instance().mapLayer(idValves)  # .toString())
 
         self._valves = _layer_valves_selected
