@@ -3,7 +3,6 @@ from qgis.core import (QgsTask,
                               QgsMessageLog,
                               Qgis,
                               QgsSpatialIndex,
-                              QgsPointXY,
                               QgsProject, QgsApplication)
 
 
@@ -19,54 +18,64 @@ class LancamentoRamal(QgsTask):
         self.__pipelines = pipelines[0]
         self.__hidrometers = hidrometers[0]
 
-        # Cria os índices espaciais
-        self.__idx_pipelines = None
-        if self.__idx_pipelines is None:
-            self.__create_spatial_index()
+        self._idx_pipelines = None
+        self.__exception = None
+        self._ramais_count = 0
+
+    def __create_spatial_index(self):
+        # Em run() para não bloquear a thread da GUI.
+        self._idx_pipelines = QgsSpatialIndex(self.__pipelines.getFeatures(),
+                                              flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
 
     def run(self):
-        QgsMessageLog.logMessage(f'Started task {self.description()}',
-                                 'TracingCAJ', Qgis.Info)
+        try:
+            QgsMessageLog.logMessage(f'Started task {self.description()}', 'TracingCAJ', Qgis.Info)
 
-        epsg = self.__hidrometers.crs().postgisSrid()
-        uri = "LineString?crs=epsg:" + str(epsg) + "&field=id:integer""&field=distance:double(20,2)&index=yes"
-        dist = QgsVectorLayer(uri, 'dist', 'memory')
+            self.__create_spatial_index()
 
-        QgsProject.instance().addMapLayer(dist)
-        prov = dist.dataProvider()
-        points_features = [point_feature for point_feature in self.__hidrometers.getFeatures()]
+            epsg = self.__hidrometers.crs().postgisSrid()
+            uri = ("LineString?crs=epsg:" + str(epsg) +
+                   "&field=id:integer&field=distance:double(20,2)&index=yes")
+            dist = QgsVectorLayer(uri, 'dist', 'memory')
+            QgsProject.instance().addMapLayer(dist)
+            prov = dist.dataProvider()
 
-        feats = []
-        if len(points_features) > 0:
-            for p in points_features:
+            feats = []
+            for i, p in enumerate(self.__hidrometers.getFeatures()):
+                if self.isCanceled():
+                    return False
+
                 nearest_pipe = self.find_nearest_pipelines(p.geometry())
+                if nearest_pipe is None:
+                    continue
+
                 try:
-                    minDistPoint = nearest_pipe.closestSegmentWithContext(p.geometry().asPoint())[1]
+                    min_dist_point = nearest_pipe.closestSegmentWithContext(p.geometry().asPoint())[1]
                     feat = QgsFeature()
-                    feat.setGeometry(QgsGeometry.fromPolylineXY([p.geometry().asPoint(), minDistPoint]))
-                    feat.setAttributes([points_features.index(p), feat.geometry().length()])
+                    feat.setGeometry(QgsGeometry.fromPolylineXY([p.geometry().asPoint(), min_dist_point]))
+                    feat.setAttributes([i, feat.geometry().length()])
                     feats.append(feat)
                 except Exception as e:
-                    print(p.id())
+                    QgsMessageLog.logMessage(f'Falha no hidrômetro {p.id()}: {e}', 'TracingCAJ', Qgis.Warning)
 
-        prov.addFeatures(feats)
+            prov.addFeatures(feats)
+            dist.updateExtents()
+            self._ramais_count = len(feats)
+            return True
+        except Exception as e:
+            self.__exception = e
+            return False
 
     def find_nearest_pipelines(self, point):
-        pipelines = self.idx_pipelines.nearestNeighbor(point, 1, self.__user_distance)
-
+        pipelines = self._idx_pipelines.nearestNeighbor(point, 1, self.__user_distance)
         if len(pipelines) > 0:
-            for pipe in pipelines:
-                return self.idx_pipelines.geometry(pipe)
+            return self._idx_pipelines.geometry(pipelines[0])
+        return None
 
     def finished(self, result):
         if result:
-            self.__hidrometers.selectByIds(self.__list_valves)
-            self.__pipelines.selectByIds(self.__list_visited_pipelines_ids)
-
-            QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly"
-                                     f"Iterations: {self.__iterations}"
-                                     f"Pipelines: {self.__list_visited_pipelines_ids}"
-                                     f"Valves: {self.__list_valves}",
+            QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly\n"
+                                     f"Ramais criados: {self._ramais_count}",
                                      level=Qgis.Success)
         else:
             if self.__exception is None:
@@ -83,7 +92,3 @@ class LancamentoRamal(QgsTask):
         QgsMessageLog.logMessage(
             f'TracingTrask {self.description()} was canceled', level=Qgis.Info)
         super().cancel()
-
-    def __create_spatial_index(self):
-        self.__idx_pipelines = QgsSpatialIndex(self.__pipelines.getFeatures(),
-                                               flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
