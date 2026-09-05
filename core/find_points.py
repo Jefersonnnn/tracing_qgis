@@ -1,10 +1,15 @@
-from qgis._core import QgsGeometry, QgsDistanceArea
-from qgis.core import QgsTask, QgsProject, QgsSpatialIndex, QgsPointXY, QgsMessageLog, QgsRectangle, QgsVectorLayer, \
-    QgsApplication, QgsPoint, Qgis, QgsWkbTypes
-from qgis.utils import iface
+from collections import deque
+
+from qgis.core import (QgsTask, QgsProject, QgsSpatialIndex, QgsPointXY,
+                       QgsMessageLog, QgsVectorLayer, Qgis)
 
 
 class FindPoints(QgsTask):
+
+    #: Nenhum segmento da rede fica maior que isto ao densificar (em unidades da camada).
+    MAX_SEGMENT_LEN = 10
+    #: Raio de busca por hidrômetros a partir de cada vértice.
+    SEARCH_RADIUS = 25
 
     def __init__(self, qpipelines, description='FindHds', debug=False):
         super().__init__(description, QgsTask.CanCancel)
@@ -16,67 +21,40 @@ class FindPoints(QgsTask):
                                               "hds_tracing", "ogr")
         else:
             self.hds_feature = QgsProject.instance().mapLayersByName('hds_tracing')[0]
+
+        self.idx_hds = None
+        self.__exception = None
+        self.q_list_pipelines = deque(qpipelines)
+        self.list_hds = set()
+
+    def __create_spatial_index(self):
+        # Construído aqui (e não no __init__) para não bloquear a thread da GUI.
         self.idx_hds = QgsSpatialIndex(self.hds_feature.getFeatures(),
                                        flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
 
-        self.__exception = None
-        self.q_list_pipelines = qpipelines
-        self.list_hds = []
-
-    def find_hds_by_nearest_neighbor(self, points_vertex):
-        hds_nearest = self.idx_hds.nearestNeighbor(point=QgsPointXY(points_vertex), neighbors=10,
-                                                   maxDistance=25)
-
-        if len(hds_nearest) > 0:
-            for hd in hds_nearest:
-                if hd not in self.list_hds:
-                    self.list_hds.append(hd)
-
-    def split_line(self, p1, p2, pos, pipeline):
-        geo = QgsGeometry.fromPolyline([p1, p2])
-        center = geo.centroid()
-        pipeline.insert(pos, center.asPoint())
-
-    def get_points(self, pipeline):
-        pipe = [QgsPointXY(pipeline.vertexAt(i)) for i in range(pipeline.get().childCount())]
-        distances = []
-        breakForce = 0
-        while True:
-            if breakForce == 1000:
-                break
-            # check isCanceled() to handle cancellation
-            if self.isCanceled():
-                return False
-            increment = 0
-            pipeline = QgsGeometry.fromMultiPointXY(pipe)
-
-            for i in range(len(pipe) -1):
-                p1 = pipeline.vertexAt(i)
-                p2 = pipeline.vertexAt(i + 1)
-                d = QgsDistanceArea()
-                distance = d.measureLine(QgsPointXY(p1), QgsPointXY(p2))
-                distances.append(distance)
-                if distance > 10:
-                    self.split_line(p1, p2, i+1+increment, pipe)
-                    increment += 1
-
-            breakForce += 1
-            if distances:
-                if max(distances) <= 10:
-                    break
-            distances.clear()
-        return pipeline
+    def find_hds_by_nearest_neighbor(self, point_vertex):
+        hds_nearest = self.idx_hds.nearestNeighbor(QgsPointXY(point_vertex),
+                                                   neighbors=10,
+                                                   maxDistance=self.SEARCH_RADIUS)
+        self.list_hds.update(hds_nearest)
 
     def run(self):
-
         try:
+            self.__create_spatial_index()
+
             while len(self.q_list_pipelines) > 0:
-                pipeline = self.q_list_pipelines.pop(0)
-                pipeline_geo = self.get_points(pipeline.geometry())
+                if self.isCanceled():
+                    return False
 
-                for i in range(0, len(pipeline_geo.get()) - 1):
-                    self.find_hds_by_nearest_neighbor(pipeline_geo.vertexAt(i))
+                pipeline = self.q_list_pipelines.popleft()
+                # densifyByDistance resolve "nenhum segmento > MAX_SEGMENT_LEN" num
+                # único passe, substituindo o antigo laço de subdivisão O(n²).
+                densified = pipeline.geometry().densifyByDistance(self.MAX_SEGMENT_LEN)
 
+                for vertex in densified.vertices():
+                    if self.isCanceled():
+                        return False
+                    self.find_hds_by_nearest_neighbor(vertex)
         except Exception as e:
             self.__exception = e
             return False
@@ -85,10 +63,10 @@ class FindPoints(QgsTask):
 
     def finished(self, result):
         if result:
-            self.hds_feature.selectByIds(self.list_hds)
+            self.hds_feature.selectByIds(list(self.list_hds))
 
             QgsMessageLog.logMessage(f"Task {self.description()} has been executed correctly\n"
-                                     f"HDS: {self.list_hds}",
+                                     f"HDS: {sorted(self.list_hds)}",
                                      level=Qgis.Success)
         else:
             if self.__exception is None:
