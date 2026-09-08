@@ -129,3 +129,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# QGIS layer style presets (aplicados manualmente no projeto, não pelo plugin)
+qgis_styles/
+
+# Scripts locais de dev
+run_pycharm.bat
