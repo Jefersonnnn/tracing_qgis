@@ -1,4 +1,5 @@
-from qgis.PyQt.QtGui import *
+from qgis.PyQt.QtCore import QCoreApplication
+from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
 from qgis.core import (
@@ -45,6 +46,10 @@ class Tracing:
 
     def unload(self):
         # remove the plugin menu item and icon
+        try:
+            self.action.triggered.disconnect(self.run)
+        except (TypeError, RuntimeError):
+            pass
         self.iface.removePluginMenu("&Tracing plugins", self.action)
         self.iface.removeToolBarIcon(self.action)
 
@@ -87,9 +92,7 @@ class Tracing:
             self.action = QAction(icon, "Start Tracing", self.iface.mainWindow())
         else:
             self.action = QAction("Start Tracing", self.iface.mainWindow())
-
-        # add toolbar button and menu item
-        self.iface.addToolBarIcon(self.action)
+        # O botão da toolbar e o item de menu são adicionados em initGui().
 
 if __name__ == '__main__':
     Tracing().run()
