@@ -211,15 +211,12 @@ class TracingPipelines(QgsTask):
         # status_utilizacao = 'Desativado' = registro fora de uso, não serve para manobra
         reg_utilizacao = str(_feature['status_utilizacao']).strip()
 
-        self._log(f'|----> Valve {valve_id} | visivel={reg_isvisivel} '
-                  f'status_operacao={reg_status} status_utilizacao={reg_utilizacao!r}')
+        self._log(f'|----> Valve {valve_id} | visivel={reg_isvisivel} status_operacao={reg_status} status_utilizacao={reg_utilizacao!r}')
 
         # Registro desativado não isola nada (mesmo com status_operacao=1): ignora e
         # segue o tracing pelas redes atrás de outro registro
         if reg_utilizacao.casefold() == 'desativado':
-            QgsMessageLog.logMessage(
-                f'Valve {valve_id} está Desativado (status_operacao={reg_status}) — '
-                f'ignorada, seguindo o tracing', 'TracingCAJ', Qgis.Info)
+            self._log(f'Valve {valve_id} está Desativado (status_operacao={reg_status}) — ignorada, seguindo o tracing')
             self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
             return
 
