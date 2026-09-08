@@ -19,6 +19,9 @@ class TracingPipelines(QgsTask):
 
         self.onfinish = onfinish
         self.debug = debug
+        # Loga o caminho do tracing sem os efeitos do modo debug (rede fixa, etc.).
+        # Ligue com `tracing_task.verbose = True` para diagnosticar um traçado.
+        self.verbose = debug
 
         self._user_distance = user_distance
         self._pipelines_features = pipelines
@@ -38,17 +41,18 @@ class TracingPipelines(QgsTask):
         # Callbackmsg
         self._parent = parent
 
-        # Os índices espaciais e o cache de diâmetros são construídos em run(),
+        # Os índices espaciais e os caches de atributos são construídos em run(),
         # que roda na thread de background do QgsTaskManager (ver __create_spatial_index).
         self.__idx_pipelines = None
         self.__idx_valves = None
         self._dn_by_id = {}
+        self._status_by_id = {}
 
         self.iface = global_vars.iface
 
     def _log(self, message, level=Qgis.Info):
-        """Log condicionado ao modo debug para não onerar os loops quentes."""
-        if self.debug:
+        """Log condicionado (debug/verbose) para não onerar os loops quentes."""
+        if self.debug or self.verbose:
             QgsMessageLog.logMessage(message, 'TracingCAJ', level)
 
     def run(self):
@@ -56,7 +60,7 @@ class TracingPipelines(QgsTask):
             self._log(f'Started task {self.description()}')
 
             self.__create_spatial_index()
-            self.__build_dn_cache()
+            self.__build_pipeline_cache()
 
             # Busca por redes selecionadas (necessário ser apenas uma)
             if self.debug:
@@ -179,12 +183,13 @@ class TracingPipelines(QgsTask):
         self.__idx_valves = QgsSpatialIndex(self._valves_features.getFeatures(),
                                             flags=QgsSpatialIndex.FlagStoreFeatureGeometries)
 
-    def __build_dn_cache(self):
-        """Carrega todos os diâmetros nominais numa única requisição (evita I/O por nó)."""
+    def __build_pipeline_cache(self):
+        """Carrega diâmetro nominal e status de utilização numa única requisição (evita I/O por nó)."""
         request = QgsFeatureRequest().setSubsetOfAttributes(
-            ['diametro_nominal'], self._pipelines_features.fields())
-        self._dn_by_id = {feat.id(): feat['diametro_nominal']
-                          for feat in self._pipelines_features.getFeatures(request)}
+            ['diametro_nominal', 'status_utilizacao'], self._pipelines_features.fields())
+        for feat in self._pipelines_features.getFeatures(request):
+            self._dn_by_id[feat.id()] = feat['diametro_nominal']
+            self._status_by_id[feat.id()] = feat['status_utilizacao']
 
     def __find_neighbors(self, point_vertex, pipeline_origin_id=None):
         # Busca pelo registro mais próximo, dentro do raio maxDistance=user_distance
@@ -203,8 +208,20 @@ class TracingPipelines(QgsTask):
         reg_isvisivel = str(_feature['visivel'])
         # status_operacao = 0 = 'Aberto' | status = 1 = 'Fechado'
         reg_status = str(_feature['status_operacao'])
+        # status_utilizacao = 'Desativado' = registro fora de uso, não serve para manobra
+        reg_utilizacao = str(_feature['status_utilizacao']).strip()
 
-        self._log(f'|----> Valve {valve_id} | visivel is {reg_isvisivel} and status is {reg_status}')
+        self._log(f'|----> Valve {valve_id} | visivel={reg_isvisivel} '
+                  f'status_operacao={reg_status} status_utilizacao={reg_utilizacao!r}')
+
+        # Registro desativado não isola nada (mesmo com status_operacao=1): ignora e
+        # segue o tracing pelas redes atrás de outro registro
+        if reg_utilizacao.casefold() == 'desativado':
+            QgsMessageLog.logMessage(
+                f'Valve {valve_id} está Desativado (status_operacao={reg_status}) — '
+                f'ignorada, seguindo o tracing', 'TracingCAJ', Qgis.Info)
+            self.__find_pipelines_neighbors(point_vertex, pipeline_origin_id)
+            return
 
         if reg_isvisivel.upper() != 'NÃO' and reg_status == '0':
             self._list_valves.add(valve_id)
@@ -225,13 +242,20 @@ class TracingPipelines(QgsTask):
         origin_diameter = self._get_pipeline_dn(pipeline_origin_id) if pipeline_origin_id else None
 
         for pipeline_id in pipelines_nearest:
+            if str(self._get_pipeline_status(pipeline_id)).strip().casefold() == 'desativado':
+                self._log(f'|-----> Rede {pipeline_id} ignorada: Desativado')
+                continue
+
             if origin_diameter is not None:
                 pipeline_diameter = self._get_pipeline_dn(pipeline_id)
                 if self.is_downstream(origin_diameter, pipeline_diameter):
+                    self._log(f'|-----> Rede {pipeline_id} ignorada: is_downstream '
+                              f'(origem {origin_diameter} -> destino {pipeline_diameter})')
                     continue
 
             if (pipeline_id not in self._list_visited_pipelines_ids
                     and pipeline_id not in self._queued_ids):
+                self._log(f'|-----> Rede {pipeline_id} enfileirada')
                 self._q_list_pipelines_ids.append(pipeline_id)
                 self._queued_ids.add(pipeline_id)
 
@@ -239,6 +263,11 @@ class TracingPipelines(QgsTask):
         if pipeline_id not in self._dn_by_id:
             self._dn_by_id[pipeline_id] = self._pipelines_features.getFeature(pipeline_id)['diametro_nominal']
         return self._dn_by_id[pipeline_id]
+
+    def _get_pipeline_status(self, pipeline_id):
+        if pipeline_id not in self._status_by_id:
+            self._status_by_id[pipeline_id] = self._pipelines_features.getFeature(pipeline_id)['status_utilizacao']
+        return self._status_by_id[pipeline_id]
 
     def is_downstream(self, origin_diameter, destination_diameter):
         if origin_diameter >= 100:
