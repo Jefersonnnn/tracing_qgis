@@ -1,4 +1,4 @@
-from qgis.PyQt.QtCore import QSettings
+from qgis.PyQt.QtCore import QSettings, QTimer
 
 from qgis.core import (
     Qgis,
@@ -6,6 +6,7 @@ from qgis.core import (
     QgsApplication,
     QgsMessageLog
 )
+from qgis.gui import QgsMapToolIdentifyFeature
 
 from view import ConfigDialog
 from core.task_manager import TracingCAJ
@@ -23,12 +24,17 @@ class ConfigController:
 
         self._ui.btn_iniciar_tracing.clicked.connect(self.start_tracing)
         self._ui.btn_salvar_configs.clicked.connect(self.save_configs)
+        self._ui.btn_selecionar_clique.toggled.connect(self.toggle_select_by_click)
 
         # Task Manager
         self.__tm = QgsApplication.taskManager()
 
         self._pipelines = None
         self._valves = None
+
+        # Ferramenta de seleção de rede por clique no mapa (ver toggle_select_by_click)
+        self._select_tool = None
+        self._previous_map_tool = None
 
         self.iface = None
         if self.iface is None:
@@ -69,7 +75,7 @@ class ConfigController:
         self.set_status_msg("Iniciando...")
         try:
             if self._pipelines is not None and self._valves is not None:
-                pipeline_select = self.iface.activeLayer().selectedFeatures()
+                pipeline_select = self._pipelines.selectedFeatures()
                 if pipeline_select:
                     if len(pipeline_select) == 1:
                         self.set_disable_button_inicial()
@@ -95,6 +101,61 @@ class ConfigController:
         except Exception as e:
             print(e)
             self.set_enable_button_iniciar()
+
+    def toggle_select_by_click(self, checked):
+        """Ativa/desativa a ferramenta que permite selecionar a rede clicando no mapa,
+        como alternativa às ferramentas de seleção nativas do QGIS."""
+        canvas = self.iface.mapCanvas()
+
+        if not checked:
+            # Clique manual no botão: não estamos dentro do canvasReleaseEvent da
+            # ferramenta, então é seguro trocar de ferramenta na hora.
+            self._restore_previous_tool()
+            return
+
+        if self._pipelines is None:
+            self._set_select_button_checked(False)
+            self.set_status_msg("Selecione a camada de redes antes de usar o clique no mapa")
+            return
+
+        self._previous_map_tool = canvas.mapTool()
+        self._select_tool = QgsMapToolIdentifyFeature(canvas, self._pipelines)
+        self._select_tool.featureIdentified.connect(self._on_pipeline_clicked)
+        self._select_tool.deactivated.connect(self._on_select_tool_deactivated)
+        canvas.setMapTool(self._select_tool)
+        self.set_status_msg("Clique sobre uma rede no mapa para selecioná-la...")
+
+    def _on_pipeline_clicked(self, feature):
+        self._pipelines.removeSelection()
+        self._pipelines.select(feature.id())
+        self.set_status_msg("Rede selecionada no mapa. Clique em Iniciar para rastrear.")
+        # Este slot roda a partir de dentro do canvasReleaseEvent do próprio
+        # QgsMapToolIdentifyFeature (que emite featureIdentified em plena execução do
+        # evento de clique). Trocar a ferramenta do mapa agora, de forma síncrona,
+        # derruba o QGIS (access violation). Adiamos para o próximo ciclo do loop de
+        # eventos do Qt, quando o canvasReleaseEvent já tiver retornado.
+        QTimer.singleShot(0, self._restore_previous_tool)
+
+    def _on_select_tool_deactivated(self):
+        # Também é chamado se o usuário trocar de ferramenta manualmente na barra do QGIS
+        self._set_select_button_checked(False)
+        self._select_tool = None
+        self._previous_map_tool = None
+
+    def _restore_previous_tool(self):
+        tool = self._select_tool
+        if tool is None:
+            return
+        canvas = self.iface.mapCanvas()
+        if self._previous_map_tool is not None:
+            canvas.setMapTool(self._previous_map_tool)
+        else:
+            canvas.unsetMapTool(tool)
+
+    def _set_select_button_checked(self, checked):
+        self._ui.btn_selecionar_clique.blockSignals(True)
+        self._ui.btn_selecionar_clique.setChecked(checked)
+        self._ui.btn_selecionar_clique.blockSignals(False)
 
     def set_layers(self, layer):
         """

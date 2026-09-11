@@ -58,6 +58,9 @@ if they are missing:
 
 ## Installation
 
+> Need a step-by-step guide in Portuguese with screenshots (for non-technical
+> users)? See [GUIA_INSTALACAO.md](GUIA_INSTALACAO.md).
+
 **From a zip**
 
 1. Download this repository as a zip.
@@ -83,8 +86,12 @@ git clone https://github.com/Jefersonnnn/tracing_qgis.git
    - **Camada de redes** — select the pipe network layer
    - **Camada de Registros** — select the valve layer
    - **Salvar** — persists the choice for the next sessions
-4. On the map, select **exactly one** feature of the pipe network (the segment you
-   want to isolate).
+4. Select **exactly one** feature of the pipe network (the segment you want to
+   isolate), either:
+   - with QGIS's native selection tools, or
+   - by clicking **Selecionar rede no mapa** in the dialog, then clicking the pipe
+     segment directly on the canvas — the button stays active until you click a
+     feature (or click the button again to cancel).
 5. Click **Iniciar**.
 6. When the task finishes, the status label shows the result, the traversed pipes
    and the valves to close are selected on the map, and the valve codes are on the

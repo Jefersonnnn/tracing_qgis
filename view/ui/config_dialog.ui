@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>400</height>
+    <height>440</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -19,13 +19,13 @@
   <property name="minimumSize">
    <size>
     <width>400</width>
-    <height>400</height>
+    <height>440</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>400</width>
-    <height>400</height>
+    <height>440</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -140,6 +140,22 @@
             </size>
            </property>
           </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_selecionar_clique">
+           <property name="toolTip">
+            <string>Clique sobre uma rede no mapa para selecioná-la</string>
+           </property>
+           <property name="statusTip">
+            <string>Selecionar rede no mapa</string>
+           </property>
+           <property name="text">
+            <string>Selecionar rede no mapa</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
          <item>
           <widget class="QPushButton" name="btn_iniciar_tracing">
